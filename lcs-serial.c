@@ -25,15 +25,25 @@ int main(int argc, char *argv[]){
 	int **c = NULL;
 	
 	
-	if (argc !=2){
+	if (argc !=2)
+	{
 		fprintf(stdout, "Correct call is: $ ./lcs-serial ex1.in\n");
 		exit(ERROR);
 	}
 	
-	f = fopen(argv[1], "r"); //adicionar chamada atraves de argv[]
-	//adicionar verificacao para abertura correcta
+	f = fopen(argv[1], "r");
+	if (f == NULL)
+	{
+		fprintf(stdout, "Error opening file\n");
+		exit(ERROR);
+	}
 	
-	buffer = malloc(SIZE_BUFFER*sizeof(char)); //Adicionar segurança para caso falhe
+	buffer = malloc(SIZE_BUFFER*sizeof(char));
+	if (buffer == NULL)
+	{
+		fprintf(stdout, "Error in buffer malloc\n");
+		exit(ERROR);
+	}
 	
 	fgets(buffer, SIZE_BUFFER_0, f);
 	sscanf(buffer,"%d %d", &size_x, &size_y);
@@ -46,22 +56,57 @@ int main(int argc, char *argv[]){
 	else
 		buffer = realloc(buffer, size_xx);
 		
-	x = malloc((size_x+1)*sizeof(char)); //Adicionar segurança para caso falhe
+	if (buffer == NULL)
+	{
+		fprintf(stdout, "Error in buffer realloc\n");
+		exit(ERROR);
+	}
+		
+	x = malloc((size_x+1)*sizeof(char));
+	if (x == NULL)
+	{
+		fprintf(stdout, "Error in x malloc\n");
+		exit(ERROR);
+	}
 	fgets(buffer, size_xx, f); 
 	sscanf(buffer, "%s\n", x);
 	
-	y = malloc((size_y+1)*sizeof(char)); //Adicionar segurança para caso falhe
+	y = malloc((size_y+1)*sizeof(char));
+	if (y == NULL)
+	{
+		fprintf(stdout, "Error in y malloc\n");
+		exit(ERROR);
+	}
 	fgets(buffer, size_yy,  f);
 	sscanf(buffer, "%s\n", y);
 
 	c = (int **)calloc((size_x+2), sizeof(int*));
-	for(i = 0; i <= size_x; i++) c[i] = (int *)calloc((size_y+2), sizeof(int));
+	if (c == NULL)
+	{
+		fprintf(stdout, "Error in c malloc\n");
+		exit(ERROR);
+	}
+	
+	for(i = 0; i <= size_x; i++)
+	{
+		c[i] = (int *)calloc((size_y+2), sizeof(int));
+		if (c[i] == NULL)
+		{
+		fprintf(stdout, "Error in c[i] calloc\n");
+		exit(ERROR);
+		}
+		
+	}
 
 	
-	for(i=1;i<= size_x;i++){
-		for(j=1;j<= size_y;j++){
-			if (x[i-1]==y[j-1]) c[i][j] = c[i-1][j-1]+ 1 cost(i); //match
-			else c[i][j] = max(c[i][j-1],c[i-1][j]);
+	for(i=1;i<= size_x;i++)
+	{
+		for(j=1;j<= size_y;j++)
+		{
+			if (x[i-1]==y[j-1]) 
+				c[i][j] = c[i-1][j-1]+ cost(i); //match
+			else 
+				c[i][j] = max(c[i][j-1],c[i-1][j]);
 		}
 	}
 
@@ -71,31 +116,40 @@ int main(int argc, char *argv[]){
 	else
 		z = malloc((size_y+1)*sizeof(char));
 		
+	if (z == NULL)
+	{
+		fprintf(stdout, "Error in z malloc\n");
+		exit(ERROR);
+	}
+		
 	int k=0; //(indice para o vector z)
 	
-	while((i>0)&&(j>0)){
+	while((i>0)&&(j>0))
+	{
 			
-			if (x[i-1]==y[j-1]) {	//match, copiar para z, avancar diagonal	
-				z[k]=x[i-1];
-				i=i-1;
-				j=j-1;
-				k++;
-			}
+		if (x[i-1]==y[j-1]) //match
+		{	
+			z[k]=x[i-1];
+			i=i-1;
+			j=j-1;
+			k++;
+		}
 			
-			else{
-				
-				if(c[i-1][j]>c[i][j-1])		//maior, esquerda ou acima?
-					i=i-1;		//move para cima
-				else
-					j=j-1;		//move para a esquerda
-			}
+		else
+		{
+			
+			if(c[i-1][j]>c[i][j-1])	
+				i=i-1;	//up
+			else
+				j=j-1;	//left
+		}
 	}
 	
-	//sai do ciclo na posicao a seguir ao ultimo caracter
-	z[k]='\0';		//terminar vector z
+	z[k]='\0';	//end vector z
 	
 	fprintf(stdout, "%d\n", k-1);
-	for(i=k-1;i>0;i--){
+	for(i=k-1;i>0;i--)
+	{
 		fprintf(stdout, "%c", z[i]);
 	}
 	fprintf(stdout, "\n");
@@ -103,7 +157,8 @@ int main(int argc, char *argv[]){
 	free(buffer);
 	free(x);
 	free(y);
-	for(i = 0; i <= size_x; i++) free(c[i]);
+	for(i = 0; i <= size_x; i++) 
+		free(c[i]);
 	free (c);
 	free(z);
 	fclose(f);
