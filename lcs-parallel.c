@@ -92,7 +92,7 @@ int main(int argc, char *argv[]){
 	}
 	
 	
-	//not worth it	
+	//not worth it
 	for(i = 0; i <= size_x; i++)
 	{
 		c[i] = (int *)calloc((size_y+2), sizeof(int));
@@ -103,24 +103,87 @@ int main(int argc, char *argv[]){
 		}
 		
 	}
+	
+	printf("size_x=%d\nsize_y=%d\n\n",size_x, size_y);
+	
+	int h;
+	
+	
+	if(size_x<=size_y){
 		
-	for(i=1;i<= size_x;i++)
-		#pragma omp parallel for
-		for(j=1;j<= size_y;j++)
-			if (x[i-1]==y[j-1]) 
-				c[i][j] = cost(i); //match
-
-	#pragma omp barrier
+		for(h=1;h <= size_y;h++)
+		{	
+			
+			for(j=h, i=1; j>0; j--, i++){
+				if(i<=size_x){	
+					if (x[i-1]==y[j-1]) 
+						c[i][j] = c[i-1][j-1]+ cost(i); //match
+					else 
+						c[i][j] = max(c[i][j-1],c[i-1][j]);
+				}
+			}
+		}
+		
+		for(h=abs(size_x-size_y);h <= size_y;h++)
+		{
+			for(j=h, i=size_x; j<=size_y; j++, i--){
+					if(i>=1){
+						if (x[i-1]==y[j-1]) 
+							c[i][j] = c[i-1][j-1]+ cost(i); //match
+						else 
+							c[i][j] = max(c[i][j-1],c[i-1][j]);
+					}
+			}
+		}
+	}
+	else{
+		for(h=1;h <= size_x;h++)
+		{
+			for(i=h, j=1; i>0; i--, j++){
+				if(j<=size_y){	
+					if (x[i-1]==y[j-1]) 
+						c[i][j] = c[i-1][j-1]+ cost(i); //match
+					else 
+						c[i][j] = max(c[i][j-1],c[i-1][j]);
+				}
+			}
+		}	
+		
+		for(h=abs(size_x-size_y);h <= size_x;h++)
+		{
+			for(i=h, j=size_y; i<=size_x; i++, j--){
+					if(j>=1){
+						if (x[i-1]==y[j-1]) 
+							c[i][j] = c[i-1][j-1]+ cost(i); //match
+						else 
+							c[i][j] = max(c[i][j-1],c[i-1][j]);
+					}
+			}
+		}
+	}
+	
+	
+	
+	/*for(i=0;i<= size_x;i++)
+	{
+		for(j=0;j<= size_y;j++)
+		{
+			printf("%d ", c[i][j]);
+		}
+		printf("\n");
+	}*/
+	
+	/*#pragma omp parallel for private(j)	
 	for(i=1;i<= size_x;i++)
 	{
 		for(j=1;j<= size_y;j++)
 		{
-			if (c[i][j]==1) 
-				c[i][j] = c[i-1][j-1]+ c[i][j];
+			if (x[i-1]==y[j-1]) 
+				c[i][j] = c[i-1][j-1]+ cost(i); //match
 			else 
 				c[i][j] = max(c[i][j-1],c[i-1][j]);
 		}
-	}
+	}*/
  
 
 	if(size_x<size_y)
@@ -136,7 +199,8 @@ int main(int argc, char *argv[]){
 		
 	int k=0; //(indice para o vector z)
 	
-	
+	i = size_x;
+	j = size_y;
 	while((i>0)&&(j>0))
 	{
 			
@@ -168,7 +232,6 @@ int main(int argc, char *argv[]){
 	fprintf(stdout, "\n");
 
 	
-
 
 
 	free(buffer);
