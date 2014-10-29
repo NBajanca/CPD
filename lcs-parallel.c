@@ -108,56 +108,69 @@ int main(int argc, char *argv[]){
 	
 	int h;
 	
-	
 	if(size_x<=size_y){
+		
 		
 		for(h=1;h <= size_y;h++)
 		{	
-			
-			for(j=h, i=1; j>0; j--, i++){
+			i=1;
+			#pragma omp parallel for private(i,j)
+			for(j=h; j>0; j--){
 				if(i<=size_x){	
 					if (x[i-1]==y[j-1]) 
 						c[i][j] = c[i-1][j-1]+ cost(i); //match
 					else 
 						c[i][j] = max(c[i][j-1],c[i-1][j]);
 				}
+				i++;
 			}
+			
 		}
 		
-		for(h=abs(size_x-size_y);h <= size_y;h++)
+		for(h= size_y-size_x ;h <= size_y;h++)
 		{
-			for(j=h, i=size_x; j<=size_y; j++, i--){
+			i=size_x;
+			#pragma omp parallel for private(i,j)
+			for(j=h ; j<=size_y; j++ ){
 					if(i>=1){
 						if (x[i-1]==y[j-1]) 
 							c[i][j] = c[i-1][j-1]+ cost(i); //match
 						else 
 							c[i][j] = max(c[i][j-1],c[i-1][j]);
 					}
+					i--;
 			}
+			
 		}
 	}
 	else{
 		for(h=1;h <= size_x;h++)
 		{
-			for(i=h, j=1; i>0; i--, j++){
+			j=1;
+			#pragma omp parallel for
+			for(i=h; i>0; i--){
 				if(j<=size_y){	
 					if (x[i-1]==y[j-1]) 
 						c[i][j] = c[i-1][j-1]+ cost(i); //match
 					else 
 						c[i][j] = max(c[i][j-1],c[i-1][j]);
 				}
+				j++;
 			}
 		}	
 		
 		for(h=abs(size_x-size_y);h <= size_x;h++)
 		{
-			for(i=h, j=size_y; i<=size_x; i++, j--){
+			j=size_y;
+			#pragma omp parallel for
+			for(i=h; i<=size_x; i++){
 					if(j>=1){
 						if (x[i-1]==y[j-1]) 
 							c[i][j] = c[i-1][j-1]+ cost(i); //match
 						else 
 							c[i][j] = max(c[i][j-1],c[i-1][j]);
 					}
+					j--;
 			}
 		}
 	}
@@ -199,8 +212,9 @@ int main(int argc, char *argv[]){
 		
 	int k=0; //(indice para o vector z)
 	
-	i = size_x;
-	j = size_y;
+	i = size_x+1;
+	j = size_y+1;
+	
 	while((i>0)&&(j>0))
 	{
 			
