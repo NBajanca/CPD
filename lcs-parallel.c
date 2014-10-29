@@ -27,6 +27,7 @@ int main(int argc, char *argv[]){
 	char *x=NULL, *y=NULL, *z=NULL; 
 	unsigned short **c = NULL;
 	
+	omp_set_num_threads(4);
 		
 	if (argc !=2)
 	{
