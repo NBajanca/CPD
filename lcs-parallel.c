@@ -98,7 +98,7 @@ int main(int argc, char *argv[]){
 		c[i] = (int *)calloc((size_y+2), sizeof(int));
 		if (c[i] == NULL)
 		{
-		fprintf(stdout, "Error in c[i] calloc\n");
+		fprintf(stdout, "Error in c[%d] calloc\n",i);
 		exit(ERROR);
 		}
 		
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]){
 		
 		for(h=1;h <= size_y;h++)
 		{	
-			
+			//i=1;
 			#pragma omp parallel for private(i)
 			for(j=h; j>0; j--){
 				i=h-j+1;
@@ -123,22 +123,24 @@ int main(int argc, char *argv[]){
 					else 
 						c[i][j] = max(c[i][j-1],c[i-1][j]);
 				}
+				i++;
 			}
 			
 		}
 		
 		for(h= size_y-size_x ;h <= size_y;h++)
 		{
-
+			//i=size_x;
 			#pragma omp parallel for private(i)
 			for(j=h ; j<=size_y; j++ ){
-				i=h-j+1;
+				i=h-j+size_x;
 					if(i>=1){
 						if (x[i-1]==y[j-1]) 
 							c[i][j] = c[i-1][j-1]+ cost(i); //match
 						else 
 							c[i][j] = max(c[i][j-1],c[i-1][j]);
 					}
+					//i--;
 			}
 			
 		}
@@ -184,18 +186,6 @@ int main(int argc, char *argv[]){
 			printf("%d ", c[i][j]);
 		}
 		printf("\n");
-	}*/
-	
-	/*#pragma omp parallel for private(j)	
-	for(i=1;i<= size_x;i++)
-	{
-		for(j=1;j<= size_y;j++)
-		{
-			if (x[i-1]==y[j-1]) 
-				c[i][j] = c[i-1][j-1]+ cost(i); //match
-			else 
-				c[i][j] = max(c[i][j-1],c[i-1][j]);
-		}
 	}*/
  
 
