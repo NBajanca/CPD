@@ -22,8 +22,7 @@ int main(int argc, char *argv[]){
 	int size_x, size_y, i, j;
 	int size_xx, size_yy;
 	char *x=NULL, *y=NULL, *z=NULL; 
-	short **c = NULL;
-	
+	unsigned short **c = NULL;
 	
 	if (argc !=2)
 	{
@@ -80,7 +79,7 @@ int main(int argc, char *argv[]){
 	fgets(buffer, size_yy,  f);
 	sscanf(buffer, "%s\n", y);
 
-	c = (short **)calloc((size_x+2), sizeof(short*));
+	c = (unsigned short **)calloc((size_x+2), sizeof(unsigned short*));
 	if (c == NULL)
 	{
 		fprintf(stdout, "Error in c malloc\n");
@@ -89,7 +88,7 @@ int main(int argc, char *argv[]){
 	
 	for(i = 0; i <= size_x; i++)
 	{
-		c[i] = (short *)calloc((size_y+2), sizeof(short));
+		c[i] = (unsigned short *)calloc((size_y+2), sizeof(unsigned short));
 		if (c[i] == NULL)
 		{
 		fprintf(stdout, "Error in c[i] calloc\n");
@@ -162,6 +161,7 @@ int main(int argc, char *argv[]){
 	free (c);
 	free(z);
 	fclose(f);
+
 	
 	exit(0);
 }	
