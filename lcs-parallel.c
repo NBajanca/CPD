@@ -113,32 +113,32 @@ int main(int argc, char *argv[]){
 		
 		for(h=1;h <= size_y;h++)
 		{	
-			i=1;
-			#pragma omp parallel for private(i,j)
+			
+			#pragma omp parallel for private(i)
 			for(j=h; j>0; j--){
+				i=h-j+1;
 				if(i<=size_x){	
 					if (x[i-1]==y[j-1]) 
 						c[i][j] = c[i-1][j-1]+ cost(i); //match
 					else 
 						c[i][j] = max(c[i][j-1],c[i-1][j]);
 				}
-				i++;
 			}
 			
 		}
 		
 		for(h= size_y-size_x ;h <= size_y;h++)
 		{
-			i=size_x;
-			#pragma omp parallel for private(i,j)
+
+			#pragma omp parallel for private(i)
 			for(j=h ; j<=size_y; j++ ){
+				i=h-j+1;
 					if(i>=1){
 						if (x[i-1]==y[j-1]) 
 							c[i][j] = c[i-1][j-1]+ cost(i); //match
 						else 
 							c[i][j] = max(c[i][j-1],c[i-1][j]);
 					}
-					i--;
 			}
 			
 		}
@@ -147,7 +147,7 @@ int main(int argc, char *argv[]){
 		for(h=1;h <= size_x;h++)
 		{
 			j=1;
-			#pragma omp parallel for
+			/*#pragma omp parallel for*/
 			for(i=h; i>0; i--){
 				if(j<=size_y){	
 					if (x[i-1]==y[j-1]) 
@@ -162,7 +162,7 @@ int main(int argc, char *argv[]){
 		for(h=abs(size_x-size_y);h <= size_x;h++)
 		{
 			j=size_y;
-			#pragma omp parallel for
+			#pragma omp parallel for private(j)
 			for(i=h; i<=size_x; i++){
 					if(j>=1){
 						if (x[i-1]==y[j-1]) 
