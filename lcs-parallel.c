@@ -108,10 +108,9 @@ int main(int argc, char *argv[]){
 	
 	if(size_x<=size_y){
 		
-		
 		for(h=1;h <= size_y;h++)
 		{	
-			#pragma omp parallel for private(i)
+			#pragma omp parallel for private(i,j)
 			for(j=h; j>0; j--){
 				i=h-j+1;
 				if(i<=size_x){	
@@ -124,9 +123,10 @@ int main(int argc, char *argv[]){
 			
 		}
 		
-		for(h= size_y-size_x ;h <= size_y;h++)
+		
+		for(h= size_y-size_x ;h <= size_y;h++) 
 		{
-			#pragma omp parallel for private(i)
+			#pragma omp parallel for private(i,j)
 			for(j=h ; j<=size_y; j++ ){
 				i=h-j+size_x;
 					if(i>=1){
@@ -140,32 +140,43 @@ int main(int argc, char *argv[]){
 		}
 	}
 	else{
-		for(h=1;h <= size_x;h++)
+		for(h=1;h <= size_y;h++)
 		{
 			
-			#pragma omp parallel for private(j)
+			#pragma omp parallel for private(i,j) 
 			for(i=h; i>0; i--){
 				j=h-i+1;
-				if(j<=size_y){	
-					if (x[i-1]==y[j-1]) 
-						c[i][j] = c[i-1][j-1]+ cost(i); //match
-					else 
-						c[i][j] = max(c[i][j-1],c[i-1][j]);
-				}
+				if (x[i-1]==y[j-1]) 
+					c[i][j] = c[i-1][j-1]+ cost(i); //match
+				else 
+					c[i][j] = max(c[i][j-1],c[i-1][j]);
 			}
 		}	
 		
-		for(h=abs(size_x-size_y);h <= size_x;h++)
+		
+		for(h=1;h < size_x-size_y;h++)
 		{
-			#pragma omp parallel for private(j)
+			
+			#pragma omp parallel for private(i,j) 
+			for(j=size_y; j>0; j--){
+				i=h-j+size_y;
+				if (x[i-1]==y[j-1]) 
+					c[i][j] = c[i-1][j-1]+ cost(i); //match
+				else 
+					c[i][j] = max(c[i][j-1],c[i-1][j]);
+			}
+		}	
+		
+		
+		for(h= size_x -size_y;h <= size_x;h++) 
+		{
+			#pragma omp parallel for private(i,j) 
 			for(i=h; i<=size_x; i++){
 				j=h-i+size_y;
-					if(j>=1){
-						if (x[i-1]==y[j-1]) 
-							c[i][j] = c[i-1][j-1]+ cost(i); //match
-						else 
-							c[i][j] = max(c[i][j-1],c[i-1][j]);
-					}
+				if (x[i-1]==y[j-1]) 
+					c[i][j] = c[i-1][j-1]+ cost(i); //match
+				else 
+					c[i][j] = max(c[i][j-1],c[i-1][j]);
 			}
 		}
 	}
@@ -243,4 +254,3 @@ int main(int argc, char *argv[]){
 	exit(0);
 	
 }		
-	
