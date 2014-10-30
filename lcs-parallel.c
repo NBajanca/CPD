@@ -9,6 +9,7 @@
 #define SIZE_BUFFER 32
 
 #define max(a,b) ( ((a)>(b)) ? (a) : (b) )
+#define min(a,b) ( ((a)<(b)) ? (a) : (b) )
 
 short cost(int x)
 {
@@ -104,94 +105,86 @@ int main(int argc, char *argv[]){
 		
 	}
 	
-	int h;
-	
-	if(size_x<=size_y){
 		
-		for(h=1;h <= size_y;h++)
-		{	
-			#pragma omp parallel for private(i,j)
-			for(j=h; j>0; j--){
-				i=h-j+1;
-				if(i<=size_x){	
-					if (x[i-1]==y[j-1]) 
-						c[i][j] = c[i-1][j-1]+ cost(i); //match
-					else 
-						c[i][j] = max(c[i][j-1],c[i-1][j]);
-				}
-			}
-			
-		}
+	int h;		
 		
-		
-		for(h= size_y-size_x ;h <= size_y;h++) 
+	for( h=1; h<=min(size_x, size_y); h++)
+	{	
+		#pragma omp parallel for private(i,j)
+		for(i=h; i>0; i--)
 		{
-			#pragma omp parallel for private(i,j)
-			for(j=h ; j<=size_y; j++ ){
-				i=h-j+size_x;
-					if(i>=1){
-						if (x[i-1]==y[j-1]) 
-							c[i][j] = c[i-1][j-1]+ cost(i); //match
-						else 
-							c[i][j] = max(c[i][j-1],c[i-1][j]);
-					}
-			}
-			
+			j=h-i+1;
+			if (x[i-1]==y[j-1]) 
+				c[i][j] = c[i-1][j-1]+ cost(i); //match
+			else 
+				c[i][j] = max(c[i][j-1],c[i-1][j]);				
 		}
+		
 	}
-	else{
-		for(h=1;h <= size_y;h++)
+	
+	
+	if(size_x<=size_y)
+	{
+		
+		for(h=1; h<=size_y-size_x; h++)
 		{
-			
-			#pragma omp parallel for private(i,j) 
-			for(i=h; i>0; i--){
-				j=h-i+1;
+			#pragma omp parallel for private(i,j)
+			for(i=size_x ; i>0; i--)
+			{
+				j=h-i+size_x;
 				if (x[i-1]==y[j-1]) 
 					c[i][j] = c[i-1][j-1]+ cost(i); //match
 				else 
 					c[i][j] = max(c[i][j-1],c[i-1][j]);
 			}
-		}	
+		}
 		
+		for( h=size_y-size_x+1; h<=size_y; h++)
+		{	
+			#pragma omp parallel for private(i,j)
+			for(j=h; j<=size_y; j++)
+			{
+				i=h-j+size_x;
+				if (x[i-1]==y[j-1]) 
+					c[i][j] = c[i-1][j-1]+ cost(i); //match
+				else 
+					c[i][j] = max(c[i][j-1],c[i-1][j]);				
+			}
 		
-		for(h=1;h < size_x-size_y;h++)
+		}
+	}
+	
+	else
+	{
+		for(h=1; h<=size_x-size_y; h++)
 		{
-			
-			#pragma omp parallel for private(i,j) 
-			for(j=size_y; j>0; j--){
+			#pragma omp parallel for private(i,j)
+			for(j=size_y ; j>0; j--)
+			{
 				i=h-j+size_y;
 				if (x[i-1]==y[j-1]) 
 					c[i][j] = c[i-1][j-1]+ cost(i); //match
 				else 
 					c[i][j] = max(c[i][j-1],c[i-1][j]);
 			}
-		}	
+		}
 		
-		
-		for(h= size_x -size_y;h <= size_x;h++) 
-		{
-			#pragma omp parallel for private(i,j) 
-			for(i=h; i<=size_x; i++){
+		for( h=size_x-size_y+1; h<=size_x; h++)
+		{	
+			#pragma omp parallel for private(i,j)
+			for(i=h; i<=size_x; i++)
+			{
 				j=h-i+size_y;
 				if (x[i-1]==y[j-1]) 
 					c[i][j] = c[i-1][j-1]+ cost(i); //match
 				else 
-					c[i][j] = max(c[i][j-1],c[i-1][j]);
+					c[i][j] = max(c[i][j-1],c[i-1][j]);				
 			}
+		
 		}
 	}
 	
-	
-	
-	/*for(i=0;i<= size_x;i++)
-	{
-		for(j=0;j<= size_y;j++)
-		{
-			printf("%d ", c[i][j]);
-		}
-		printf("\n");
-	}*/
- 
+
 
 	if(size_x<size_y)
 		z = malloc((size_x+1)*sizeof(char));
@@ -254,3 +247,4 @@ int main(int argc, char *argv[]){
 	exit(0);
 	
 }		
+	
