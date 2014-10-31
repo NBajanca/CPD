@@ -28,7 +28,7 @@ int main(int argc, char *argv[]){
 	char *x=NULL, *y=NULL, *z=NULL; 
 	unsigned short **c = NULL;
 	
-	omp_set_num_threads(4);
+
 		
 	if (argc !=2)
 	{
@@ -93,7 +93,8 @@ int main(int argc, char *argv[]){
 	}
 	
 	
-	//not worth to parellize
+	//not worth it
+	
 	for(i = 0; i <= size_x; i++)
 	{
 		c[i] = (unsigned short *)calloc((size_y+2), sizeof(unsigned short));
@@ -110,7 +111,7 @@ int main(int argc, char *argv[]){
 		
 	for( h=1; h<=min(size_x, size_y); h++)
 	{	
-		#pragma omp parallel for private(i,j)
+		#pragma omp parallel for private(i,j) schedule(guided)
 		for(i=h; i>0; i--)
 		{
 			j=h-i+1;
@@ -128,7 +129,7 @@ int main(int argc, char *argv[]){
 		
 		for(h=1; h<=size_y-size_x; h++)
 		{
-			#pragma omp parallel for private(i,j)
+			#pragma omp parallel for private(i,j) schedule(guided)
 			for(i=size_x ; i>0; i--)
 			{
 				j=h-i+size_x;
@@ -141,7 +142,7 @@ int main(int argc, char *argv[]){
 		
 		for( h=size_y-size_x+1; h<=size_y; h++)
 		{	
-			#pragma omp parallel for private(i,j)
+			#pragma omp parallel for  private(i,j) schedule(guided)
 			for(j=h; j<=size_y; j++)
 			{
 				i=h-j+size_x;
@@ -158,7 +159,7 @@ int main(int argc, char *argv[]){
 	{
 		for(h=1; h<=size_x-size_y; h++)
 		{
-			#pragma omp parallel for private(i,j)
+			#pragma omp parallel for private(i,j) schedule(guided)
 			for(j=size_y ; j>0; j--)
 			{
 				i=h-j+size_y;
@@ -171,7 +172,7 @@ int main(int argc, char *argv[]){
 		
 		for( h=size_x-size_y+1; h<=size_x; h++)
 		{	
-			#pragma omp parallel for private(i,j)
+			#pragma omp parallel for private(i,j) schedule(guided)
 			for(i=h; i<=size_x; i++)
 			{
 				j=h-i+size_y;
