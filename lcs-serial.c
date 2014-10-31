@@ -23,7 +23,7 @@ int main(int argc, char *argv[]){
 	int size_xx, size_yy;
 	char *x=NULL, *y=NULL, *z=NULL; 
 	unsigned short **c = NULL;
-	
+								//////////////////////////////////////////////
 	if (argc !=2)
 	{
 		fprintf(stdout, "Correct call is: $ ./lcs-serial ex1.in\n");
@@ -34,10 +34,10 @@ int main(int argc, char *argv[]){
 	if (f == NULL)
 	{
 		fprintf(stdout, "Error opening file\n");
-		exit(ERROR);
+		exit(ERROR);						
 	}
 	
-	buffer = malloc(SIZE_BUFFER*sizeof(char));
+	buffer = malloc(SIZE_BUFFER*sizeof(char));			//	Reading input file
 	if (buffer == NULL)
 	{
 		fprintf(stdout, "Error in buffer malloc\n");
@@ -60,8 +60,8 @@ int main(int argc, char *argv[]){
 		fprintf(stdout, "Error in buffer realloc\n");
 		exit(ERROR);
 	}
-		
-	x = malloc((size_x+1)*sizeof(char));
+									//////////////////////////////////////////////							
+	x = malloc((size_x+1)*sizeof(char));  
 	if (x == NULL)
 	{
 		fprintf(stdout, "Error in x malloc\n");
@@ -78,7 +78,7 @@ int main(int argc, char *argv[]){
 	}
 	fgets(buffer, size_yy,  f);
 	sscanf(buffer, "%s\n", y);
-
+									//	memory allocation for x, y and c
 	c = (unsigned short **)calloc((size_x+2), sizeof(unsigned short*));
 	if (c == NULL)
 	{
@@ -96,7 +96,7 @@ int main(int argc, char *argv[]){
 		}
 		
 	}
-
+									//////////////////////////////////////////////
 	
 	for(i=1;i<= size_x;i++)
 	{
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]){
 				c[i][j] = max(c[i][j-1],c[i-1][j]);
 		}
 	}
-
+									//	computation of matrix c
 
 	if(size_x<size_y)
 		z = malloc((size_x+1)*sizeof(char));
@@ -122,7 +122,7 @@ int main(int argc, char *argv[]){
 	}
 		
 	int k=0; //(indice para o vector z)
-	
+									//////////////////////////////////////////////
 	while((i>0)&&(j>0))
 	{
 			
@@ -135,7 +135,7 @@ int main(int argc, char *argv[]){
 		}
 			
 		else
-		{
+		{							//	computation of LCS from matrix c
 			
 			if(c[i-1][j]>c[i][j-1])	
 				i=i-1;	//up
@@ -152,12 +152,12 @@ int main(int argc, char *argv[]){
 		fprintf(stdout, "%c", z[i]);
 	}
 	fprintf(stdout, "\n");
-
+									//////////////////////////////////////////////
 	free(buffer);
 	free(x);
 	free(y);
 	for(i = 0; i <= size_x; i++) 
-		free(c[i]);
+		free(c[i]);						
 	free (c);
 	free(z);
 	fclose(f);
