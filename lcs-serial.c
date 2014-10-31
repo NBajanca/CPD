@@ -102,14 +102,14 @@ int main(int argc, char *argv[]){
 	{
 		for(j=1;j<= size_y;j++)
 		{
-			if (x[i-1]==y[j-1]) 
+			if (x[i-1]==y[j-1]) 				//	computation of matrix c
 				c[i][j] = c[i-1][j-1]+ cost(i); //match
 			else 
 				c[i][j] = max(c[i][j-1],c[i-1][j]);
 		}
 	}
-									//	computation of matrix c
 
+									//////////////////////////////////////////////
 	if(size_x<size_y)
 		z = malloc((size_x+1)*sizeof(char));
 	else
@@ -122,7 +122,7 @@ int main(int argc, char *argv[]){
 	}
 		
 	int k=0; //(indice para o vector z)
-									//////////////////////////////////////////////
+
 	while((i>0)&&(j>0))
 	{
 			
