@@ -26,7 +26,7 @@ int main(int argc, char *argv[]){
 								//////////////////////////////////////////////
 	if (argc !=2)
 	{
-		fprintf(stdout, "Correct call is: $ ./lcs-serial ex1.in\n");
+		fprintf(stdout, "Correct call is: $ ./lcs-mp1 exX.X.in\n");
 		exit(ERROR);
 	}
 	
@@ -166,10 +166,4 @@ int main(int argc, char *argv[]){
 	exit(0);
 }	
 
-short cost(int x)
-{
-	int i, n_iter = 20;
-	double dcost = 0;
-	for(i = 0; i < n_iter; i++) dcost += pow(sin((double) x),2) + pow(cos((double) x),2);
-	return (short) (dcost / n_iter + 0.1);
-}
+
