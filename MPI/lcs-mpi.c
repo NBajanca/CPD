@@ -21,11 +21,21 @@ typedef struct matrix_info
 	char *z;
 } matrix_info;
 
+typedef struct matrix_list
+{ 
+	int id[2];
+	unsigned short **matrix;
+	struct matrix_list *next;
+} matrix_list;
+
 void master_io(int p, MPI_Status *status, int rounds, int argc, char **argv, matrix_info *A);
 void slave_io(int id, int p, MPI_Status *status, int rounds, matrix_info A);
 void read_file(int argc, char **argv, matrix_info *A);
 matrix_info* initialize_matrix_info(int argc, char **argv);
 void divide_by_prime(matrix_info *A);
+void matrix_calc(matrix_info *A, matrix_list *B);
+matrix_list* initialize_matrix_list(matrix_info *A);
+unsigned short *generate_matrix_info(matrix_list *B, int size, int side);
 
 //cost function
 short cost(int x);
@@ -82,59 +92,152 @@ int main (int argc, char *argv[])
 /* This is the master */
 void master_io(int p, MPI_Status *status, int rounds, int argc, char **argv, matrix_info *A)
 {
-	int i;
+	int i, j;
 	MPI_Request request;
-
+	matrix_list *B;
+	unsigned short *info1, *info2;
+	
+	B = initialize_matrix_list(A);
+	matrix_calc(A, B);
+	
+	/*//pint small matrix
+	printf("[%d][%d][%d]\n",B->matrix[0][0], B->matrix[0][1], B->matrix[0][2]);
+	printf("[%d][%d][%d]\n",B->matrix[1][0], B->matrix[1][1], B->matrix[1][2]);
+	printf("[%d][%d][%d]\n",B->matrix[2][0], B->matrix[2][1], B->matrix[2][2]);*/
+	
+	info1 = generate_matrix_info(B, A->size_yd+1, 1);
+	info2 = generate_matrix_info(B, A->size_xd+1, 2);
 	
 	for(i = 0; i < rounds; i++/*= (p-1)*/)
 	{
-		MPI_Isend(&i, 1, MPI_INT, 1, i, MPI_COMM_WORLD, &request);
-		MPI_Send(&i, 1, MPI_INT, 1, i, MPI_COMM_WORLD);
-		MPI_Wait(&request, status);	
-		MPI_Irecv(&i, 1, MPI_INT, p-1, i, MPI_COMM_WORLD, &request);
-		MPI_Recv(&i, 1, MPI_INT, p-1, i, MPI_COMM_WORLD, status);
-		MPI_Wait(&request, status);
+		for (j=0; j <= A->size_yd; j++)
+			MPI_Isend(&info1[j], 1, MPI_UNSIGNED_SHORT, 1, i, MPI_COMM_WORLD, &request);
+		for (j=0; j <= A->size_xd; j++)
+			MPI_Isend(&info2[j], 1, MPI_UNSIGNED_SHORT, 1, i, MPI_COMM_WORLD, &request);
+			
+		MPI_Waitall(A->size_yd+A->size_xd,&request, status);
+		
+		/*printf("info1:[%d][%d][%d]\n",info1[0], info1[1], info1[2]);
+		printf("info2:[%d][%d][%d]\n",info2[0], info2[1], info2[2]);*/
+		
+		
+		for (j=0; j <= A->size_yd; j++)
+			MPI_Irecv(&info1[j], 1,  MPI_UNSIGNED_SHORT, p-1, i, MPI_COMM_WORLD, &request);
+		for (j=0; j <= A->size_xd; j++)
+			MPI_Irecv(&info2[j], 1,  MPI_UNSIGNED_SHORT, p-1, i, MPI_COMM_WORLD, &request);
+			
+		MPI_Waitall(A->size_yd+A->size_xd,&request, status);
 
-
-		/*if (i != 0)
-		{		
-			MPI_Irecv(&i, 1, MPI_INT, p-1, i, MPI_COMM_WORLD, &request);
-			MPI_Recv(&i, 1, MPI_INT, p-1, i, MPI_COMM_WORLD, status);
-			MPI_Wait(&request, status);
-		}
-
-		if (i < rounds -1)
-		{	
-			MPI_Isend(&i, 1, MPI_INT, 1, i, MPI_COMM_WORLD, &request);
-			MPI_Send(&i, 1, MPI_INT, 1, i, MPI_COMM_WORLD);
-			MPI_Wait(&request, status);
-		}*/
 	}
+	free(info1);
+	free(info2);
 }
 
 /* This is the slave */
 void slave_io(int id, int p, MPI_Status *status, int rounds, matrix_info A)
 {
-	int i;
+	int i, j;
 	MPI_Request request;
 	printf( "Hello world from process %d of %d\n", id, p);
-
+	unsigned short *info1, *info2;
+	
+	info1 = (unsigned short *)calloc((A.size_yd+1), sizeof(unsigned short));
+	info2 =	(unsigned short *)calloc((A.size_xd+1), sizeof(unsigned short));
+	
+	
 	for(i = 0; i < rounds; i++/*= (p-1)*/)
 	{
-		MPI_Irecv(&i, 1, MPI_INT, id-1, i, MPI_COMM_WORLD, &request);
-		MPI_Recv(&i, 1, MPI_INT, id-1, i, MPI_COMM_WORLD, status);
-		MPI_Wait(&request, status);
+		for (j=0; j <= A.size_yd; j++)
+			MPI_Irecv(&info1[j], 1, MPI_UNSIGNED_SHORT, id-1, i, MPI_COMM_WORLD, &request);
+		for (j=0; j <= A.size_xd; j++)
+			MPI_Irecv(&info2[j], 1, MPI_UNSIGNED_SHORT, id-1, i, MPI_COMM_WORLD, &request);
+			
+		MPI_Waitall(A.size_yd+A.size_xd,&request, status);
 		
-		
-
-
-		MPI_Isend(&i, 1, MPI_INT, (id+1)%p, i, MPI_COMM_WORLD, &request);
-		MPI_Send(&i, 1, MPI_INT, (id+1)%p, i, MPI_COMM_WORLD);
-		MPI_Wait(&request, status);
+		/*printf("info1:[%d][%d][%d], id:%d\n",info1[0], info1[1], info1[2],id);
+		printf("info2:[%d][%d][%d], id:%d\n",info2[0], info2[1], info2[2],id);*/
+	
+		for (j=0; j <= A.size_yd; j++)
+			MPI_Isend(&info1[j], 1, MPI_UNSIGNED_SHORT, (id+1)%p, i, MPI_COMM_WORLD, &request);
+		for (j=0; j <= A.size_xd; j++)
+			MPI_Isend(&info2[j], 1, MPI_UNSIGNED_SHORT, (id+1)%p, i, MPI_COMM_WORLD, &request);
+			
+		MPI_Waitall(A.size_yd+A.size_xd,&request, status);
 	}
+	
+	free(info1);
+	free(info2);
+}
+
+unsigned short *generate_matrix_info(matrix_list *B, int size, int side)
+{
+	unsigned short *info;
+	int i;
+	
+	info = (unsigned short *)calloc((size+1), sizeof(unsigned short));
+	
+	for (i = 0; i < size; i++)
+	{
+		if(side == 1) info[i] = B->matrix[size-1][i];
+		if(side == 2) info[i] = B->matrix[i][size-1];
+	} 
+
+	return info;
 }
 
 
+matrix_list* initialize_matrix_list(matrix_info *A)
+{
+	int i;
+	matrix_list *B;
+	
+	B = (matrix_list*)malloc(sizeof(matrix_list));
+	if (B  == NULL)
+	{
+		fprintf(stdout, "Error in B malloc\n");
+		exit(ERROR);
+	}
+	
+	B-> matrix = (unsigned short **)calloc((A->size_xd+2), sizeof(unsigned short*));
+	if (B-> matrix  == NULL)
+	{
+		fprintf(stdout, "Error in B-> matrix malloc\n");
+		exit(ERROR);
+	}
+	
+	for(i = 0; i <= A->size_xd+1; i++)
+	{
+		B-> matrix [i] = (unsigned short *)calloc((A->size_yd+2), sizeof(unsigned short));
+		if (B-> matrix[i] == NULL)
+		{
+		fprintf(stdout, "Error in B->matrix[i] calloc\n");
+		exit(ERROR);
+		}	
+	}
+	
+	B-> id[0] = 1; 
+	B-> id[1] = 1;
+	
+	B->next = (matrix_list*)malloc(sizeof(matrix_list));
+	
+	
+	return B;
+}
+
+void matrix_calc(matrix_info *A, matrix_list *B)
+{
+	int i, j;
+	for(i = 1;i <= A->size_xd;i++)
+	{
+		for(j =1 ;j<= A->size_yd;j++)
+		{
+			if (A->x[B-> id[0]+ i-2]==A->y[B-> id[1] + j-2]) 				//	computation of matrix c
+				B->matrix[i][j] = B->matrix[i-1][j-1]+ cost(i); //match
+			else 
+				B->matrix[i][j] = max(B->matrix[i][j-1],B->matrix[i-1][j]);
+		}
+	}
+}
 
 void read_file(int argc, char **argv, matrix_info *A)
 {
@@ -202,8 +305,8 @@ void read_file(int argc, char **argv, matrix_info *A)
 matrix_info* initialize_matrix_info(int argc, char **argv)
 {
 	matrix_info *A;
-	A = (matrix_info*)malloc(sizeof(matrix_info));
 	
+	A = (matrix_info*)malloc(sizeof(matrix_info));
 	if (A  == NULL)
 	{
 		fprintf(stdout, "Error in A malloc\n");
