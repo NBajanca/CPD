@@ -14,14 +14,18 @@ typedef struct matrix_info
 { 
 	int size_x;
 	int size_y;
+	int size_xd;
+	int size_yd;
 	char *x;
 	char *y;
 	char *z;
 } matrix_info;
 
-void master_io(int p, MPI_Status *status, int rounds, int argc, char **argv);
-void slave_io(int id, int p, MPI_Status *status, int rounds);
+void master_io(int p, MPI_Status *status, int rounds, int argc, char **argv, matrix_info *A);
+void slave_io(int id, int p, MPI_Status *status, int rounds, matrix_info A);
 void read_file(int argc, char **argv, matrix_info *A);
+matrix_info* initialize_matrix_info(int argc, char **argv);
+void divide_by_prime(matrix_info *A);
 
 //cost function
 short cost(int x);
@@ -33,19 +37,33 @@ int main (int argc, char *argv[])
     int id, p,
 	i, rounds;
     double secs;
+	matrix_info *A;
+
 
     MPI_Init (&argc, &argv);
 
     MPI_Comm_rank (MPI_COMM_WORLD, &id);
     MPI_Comm_size (MPI_COMM_WORLD, &p);
 
-    rounds = 10;
+    
+
+	
+	A = initialize_matrix_info(argc, argv);
+
+	if (!id)
+	{
+		printf("sixe_x: %d, size_y: %d\n", A->size_x, A->size_y );
+		printf("sixe_xd: %d, size_yd: %d\n", A->size_xd, A->size_yd );
+		printf("x: %s\ny: %s\n", A->x,A->y );
+	}
+
+	rounds = ((A->size_x)/(A->size_xd))*((A->size_y)/(A->size_yd));
 
     MPI_Barrier (MPI_COMM_WORLD);
     secs = - MPI_Wtime();
 	
-	if (!id) master_io(p, &status, rounds, argc, argv);
-    else slave_io(id, p, &status, rounds);
+	if (!id) master_io(p, &status, rounds, argc, argv, A);
+    else slave_io(id, p, &status, rounds, *A);
 
     MPI_Barrier (MPI_COMM_WORLD);
     secs += MPI_Wtime();
@@ -62,47 +80,57 @@ int main (int argc, char *argv[])
 }
 
 /* This is the master */
-void master_io(int p, MPI_Status *status, int rounds, int argc, char **argv)
+void master_io(int p, MPI_Status *status, int rounds, int argc, char **argv, matrix_info *A)
 {
 	int i;
-	matrix_info *A;
+	MPI_Request request;
 
-	//Inicializing Matrix Info
-	A = (matrix_info*)malloc(sizeof(matrix_info));
 	
-	if (A  == NULL)
+	for(i = 0; i < rounds; i++/*= (p-1)*/)
 	{
-		fprintf(stdout, "Error in A malloc\n");
-		exit(ERROR);
-	}
-
-	(*A).size_x=0;
-	(*A).size_y = 0;
-	(*A).x=NULL;
-	(*A).y=NULL;
-	(*A).z=NULL;
-
-	read_file(argc, argv, A);
-
-	printf("sixe_x: %d, size_y: %d\n", A->size_x, A->size_y );
-	printf("x: %s\n y: %s\n", A->x,A->y );
-
-	for(i = 0; i < rounds; i++)
-	{
+		MPI_Isend(&i, 1, MPI_INT, 1, i, MPI_COMM_WORLD, &request);
 		MPI_Send(&i, 1, MPI_INT, 1, i, MPI_COMM_WORLD);
+		MPI_Wait(&request, status);	
+		MPI_Irecv(&i, 1, MPI_INT, p-1, i, MPI_COMM_WORLD, &request);
 		MPI_Recv(&i, 1, MPI_INT, p-1, i, MPI_COMM_WORLD, status);
+		MPI_Wait(&request, status);
+
+
+		/*if (i != 0)
+		{		
+			MPI_Irecv(&i, 1, MPI_INT, p-1, i, MPI_COMM_WORLD, &request);
+			MPI_Recv(&i, 1, MPI_INT, p-1, i, MPI_COMM_WORLD, status);
+			MPI_Wait(&request, status);
+		}
+
+		if (i < rounds -1)
+		{	
+			MPI_Isend(&i, 1, MPI_INT, 1, i, MPI_COMM_WORLD, &request);
+			MPI_Send(&i, 1, MPI_INT, 1, i, MPI_COMM_WORLD);
+			MPI_Wait(&request, status);
+		}*/
 	}
 }
 
 /* This is the slave */
-void slave_io(int id, int p, MPI_Status *status, int rounds)
+void slave_io(int id, int p, MPI_Status *status, int rounds, matrix_info A)
 {
 	int i;
+	MPI_Request request;
+	printf( "Hello world from process %d of %d\n", id, p);
 
-	for(i = 0; i < rounds; i++)
+	for(i = 0; i < rounds; i++/*= (p-1)*/)
 	{
+		MPI_Irecv(&i, 1, MPI_INT, id-1, i, MPI_COMM_WORLD, &request);
 		MPI_Recv(&i, 1, MPI_INT, id-1, i, MPI_COMM_WORLD, status);
+		MPI_Wait(&request, status);
+		
+		
+
+
+		MPI_Isend(&i, 1, MPI_INT, (id+1)%p, i, MPI_COMM_WORLD, &request);
 		MPI_Send(&i, 1, MPI_INT, (id+1)%p, i, MPI_COMM_WORLD);
+		MPI_Wait(&request, status);
 	}
 }
 
@@ -169,6 +197,56 @@ void read_file(int argc, char **argv, matrix_info *A)
 	}
 	fgets(buffer, size_yy,  f);
 	sscanf(buffer, "%s\n", (*A).y);
+}
+	
+matrix_info* initialize_matrix_info(int argc, char **argv)
+{
+	matrix_info *A;
+	A = (matrix_info*)malloc(sizeof(matrix_info));
+	
+	if (A  == NULL)
+	{
+		fprintf(stdout, "Error in A malloc\n");
+		exit(ERROR);
+	}
+
+	(*A).size_x = 0;
+	(*A).size_y = 0;
+	(*A).size_xd= 0;
+	(*A).size_yd= 0;
+	(*A).x=NULL;
+	(*A).y=NULL;
+	(*A).z=NULL;
+
+	read_file(argc, argv, A);
+	divide_by_prime(A);
+
+	return A;
+}
+
+void divide_by_prime(matrix_info *A)
+{
+	int prime_num[10]={2,3,5,7,11,13,17,19,23,29};
+	int i;
+
+	for (i=0; i<10; i++)
+	{
+		if (((*A).size_x % prime_num[i]) == 0)
+		{
+			(*A).size_xd = prime_num[i];
+			break;
+		}
+	}
+
+	for (i=0; i<10; i++)
+	{
+		if (((*A).size_y % prime_num[i]) == 0)
+		{
+			(*A).size_yd = prime_num[i];
+			break;
+		}
+	}
+
 }
 
 short cost(int x)
