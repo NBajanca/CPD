@@ -12,47 +12,49 @@
 #define max(a,b) ( ((a)>(b)) ? (a) : (b) )
 #define min(a,b) ( ((a)<(b)) ? (a) : (b) )
 
+#ifndef LCS_MPI
+	#define LCS_MPI
+	typedef struct matrix_info 
+	{ 
+		int size_x;
+		int size_y;
+		int size_xd;
+		int size_yd;
+		int iter;
+		unsigned short **matrix_iter;
+		unsigned short *matrix_dist;
+		char *x;
+		char *y;
+	} matrix_info;
 
-typedef struct matrix_info 
-{ 
-	int size_x;
-	int size_y;
-	int size_xd;
-	int size_yd;
-	unsigned short **matrix_iter;
-	unsigned short *matrix_dist;
-	char *x;
-	char *y;
-} matrix_info;
+	typedef struct matrix_list
+	{ 
+		int id[2];
+		unsigned short **matrix;
+		struct matrix_list *next;
+	} matrix_list;
 
-typedef struct matrix_list
-{ 
-	int id[2];
-	unsigned short **matrix;
-	struct matrix_list *next;
-} matrix_list;
+	void master_io(int p, MPI_Status *status, matrix_info *A);
+	void slave_io(int id, int p, MPI_Status *status, matrix_info *A);
 
-void master_io(int p, MPI_Status *status, int rounds, matrix_info *A);
-void slave_io(int id, int p, MPI_Status *status, int rounds, matrix_info *A);
+	matrix_info* initialize_matrix_info(char **argv);
+	void read_file(char **argv, matrix_info *A);
+	void divide_by_prime(matrix_info *A);
+	void matrix_iter(matrix_info *A);
+	void find_pos(matrix_info *A, int iter, int *x, int *y);
 
-matrix_info* initialize_matrix_info(char **argv);
-void read_file(char **argv, matrix_info *A);
-void divide_by_prime(matrix_info *A);
-void matrix_iter(matrix_info *A);
-void find_pos(matrix_info *A, int iter, int *x, int *y);
-
-matrix_list* initialize_matrix_list(matrix_info *A);
-void matrix_calc(matrix_info *A, matrix_list *B);
-short cost(int x);
-unsigned short *generate_matrix_info(matrix_list *B, int size, int side);
-
+	matrix_list* initialize_matrix_list(matrix_info *A);
+	void matrix_calc(matrix_info *A, matrix_list *B);
+	short cost(int x);
+	unsigned short *generate_matrix_info(matrix_list *B, int size, int side);
+	unsigned short ***initialize_info(matrix_info *A, matrix_list *B);
+#endif
 
 int main (int argc, char *argv[]) 
 {
 
     MPI_Status status;
-    int id, p,
-	i, rounds;
+    int id, p, i;
     double secs;
 	matrix_info *A;
 	
@@ -81,18 +83,18 @@ int main (int argc, char *argv[])
 	}
 	
 	//number of iterations
-	rounds = ((A->size_x)/(A->size_xd))*((A->size_y)/(A->size_yd));
+	A -> iter = ((A->size_x)/(A->size_xd))*((A->size_y)/(A->size_yd));
 	
 	//allocs and initializes the A-> matrix_dist
-	A-> matrix_dist = (unsigned short *)calloc((rounds +1), sizeof(unsigned short));
+	A-> matrix_dist = (unsigned short *)calloc((A -> iter +1), sizeof(unsigned short));
 
 	//wait for every process to be ready
     MPI_Barrier (MPI_COMM_WORLD);
     secs = - MPI_Wtime();
 	
 	//separates master from slaves (master is process 0)
-	if (!id) master_io(p, &status, rounds, A);
-    else slave_io(id, p, &status, rounds, A);
+	if (!id) master_io(p, &status, A);
+    else slave_io(id, p, &status, A);
 	
 	//waits for all to be finished
     MPI_Barrier (MPI_COMM_WORLD);
@@ -101,20 +103,19 @@ int main (int argc, char *argv[])
 	//prints time spent
 	if(!id) /*Master*/
 	{
-		printf("Iterations= %d, N Processes = %d, Time = %12.6f sec,\n",  rounds, p, secs);
-		printf ("Average time per Iteration/Process = %12.6f sec\n",	secs/(rounds/p));
+		printf("Iterations= %d, N Processes = %d, Time = %12.6f sec,\n",  A-> iter, p, secs);
+		printf ("Average time per Iteration/Process = %12.6f sec\n",	secs/(A->iter/p));
   	}
 
    	MPI_Finalize();
    	return 0;
 }
 
-/* master_io (p, status, rounds, A)
+/* master_io (p, status, A)
  * 
  * Input:
  * 			p -> number of processes
  * 			status -> MPI_status
- * 			rounds -> number of iterations
  * 			A -> structure matrix_info
  * 
  * Output:
@@ -131,23 +132,29 @@ int main (int argc, char *argv[])
  * 			This function is only run by the master (process id=0)			
  * 
  */
-void master_io(int p, MPI_Status *status, int rounds, matrix_info *A)
+void master_io(int p, MPI_Status *status, matrix_info *A)
 {
 	MPI_Request request;
 	int i, j, 
 		send_id = 1, 
 		x=1, y=1;
 	matrix_list *B;
-	unsigned short *info1, *info2;
+	unsigned short *info_blanck[2];
+	unsigned short ***info;
 	
 	
 	B = initialize_matrix_list(A); //first B structure of master
+	info_blanck[0] = generate_matrix_info(B, A->size_yd+1, 1);
+	info_blanck[1] = generate_matrix_info(B, A->size_xd+1, 2);
+	
 	matrix_calc(A, B); //calc of the iteration 1
 	
-	info1 = generate_matrix_info(B, A->size_yd+1, 1);
-	info2 = generate_matrix_info(B, A->size_xd+1, 2);
+	info = initialize_info(A, B);
 	
-	for(i = 2; i < rounds; i++)
+	info[1][0] = generate_matrix_info(B, A->size_yd+1, 1);
+	info[1][1] = generate_matrix_info(B, A->size_xd+1, 2);
+	
+	for(i = 2; i < A->iter; i++)
 	{	
 		find_pos(A, i, &x, &y); //finds the position for the iteration that is about to send
 		
@@ -157,22 +164,22 @@ void master_io(int p, MPI_Status *status, int rounds, matrix_info *A)
 		
 		//master sends the data needed to calc the [x][y] matrix to the process (send_id)
 		for (j=0; j <= A->size_yd; j++)
-			MPI_Send(&info1[j], 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
+			MPI_Send(&info_blanck[0][j], 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
 		for (j=0; j <= A->size_xd; j++)
-			MPI_Send(&info2[j], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
+			MPI_Send(&info[1][1][j], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
 		
 		//Next process
 		send_id = send_id+1;
 		if (send_id == p) send_id = 1;
 
 		//Master waits to receive from any slave
-		MPI_Recv(&info1[j], 1,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+		MPI_Recv(&info[1][0][j], 1,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		
 		//Master receives the rest of the message from the slave that was already sending
 		for (j=1; j <= A->size_yd; j++)
-			MPI_Recv(&info1[j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+			MPI_Recv(&info[1][0][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
 		for (j=0; j <= A->size_xd; j++)
-			MPI_Recv(&info2[j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+			MPI_Recv(&info[1][1][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
 
 	}
 	
@@ -180,22 +187,18 @@ void master_io(int p, MPI_Status *status, int rounds, matrix_info *A)
 	for (send_id=1; send_id < p; send_id ++)
 	{
 		for (j=0; j <= A->size_yd; j++)
-			MPI_Send(&info1[j], 1, MPI_UNSIGNED_SHORT, send_id, DIETAG, MPI_COMM_WORLD);
+			MPI_Send(&info[1][1][j], 1, MPI_UNSIGNED_SHORT, send_id, DIETAG, MPI_COMM_WORLD);
 		for (j=0; j <= A->size_yd; j++)
-			MPI_Send(&info2[j], 1, MPI_UNSIGNED_SHORT, send_id, DIETAG, MPI_COMM_WORLD);
+			MPI_Send(&info[1][1][j], 1, MPI_UNSIGNED_SHORT, send_id, DIETAG, MPI_COMM_WORLD);
 	}
-
-	free(info1);
-	free(info2);
 }
 
-/* slave_io(id, p, status, rounds, A)
+/* slave_io(id, p, status, A)
  * 
  * Input:
  * 			id -> id of the process
  * 			p -> number of processes
  * 			status -> MPI_status
- * 			rounds -> number of iterations
  * 			A -> structure matrix_info
  * 
  * Output:
@@ -211,7 +214,7 @@ void master_io(int p, MPI_Status *status, int rounds, matrix_info *A)
  * 			This function is only run by the slaves (process id!=0)			
  * 
  */
-void slave_io(int id, int p, MPI_Status *status, int rounds, matrix_info *A)
+void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 {
 	int i, j;
 	matrix_list *B, *B_last, *B_aux;
@@ -742,12 +745,61 @@ unsigned short *generate_matrix_info(matrix_list *B, int size, int side)
 	int i;
 	
 	info = (unsigned short *)calloc((size+1), sizeof(unsigned short));
+	if (info  == NULL)
+	{
+		fprintf(stdout, "Error in info[] malloc\n");
+		exit(ERROR);
+	}
 	
 	for (i = 0; i < size; i++)
 	{
 		if(side == 1) info[i] = B->matrix[size-1][i];
 		if(side == 2) info[i] = B->matrix[i][size-1];
 	} 
+
+	return info;
+}
+
+/* initialize_info(A, B)
+ * 
+ * Input:
+ * 			A -> structure matrix_info
+ * 			B -> structure matrix_list (pointer to the first iteration)
+ * 
+ * Output:
+ * 			3 dimensional matrix that is going to hold the information received from the slaves
+ * 
+ * Changes:
+ * 			None
+ * 
+ * Description:
+ * 			Allocates memory
+ * 
+ * Notes:
+ * 			The last alloc (for the *unsigned short) is made in function generate_matrix_info
+ * 
+ */
+unsigned short ***initialize_info(matrix_info *A, matrix_list *B)
+{
+	int i;
+	unsigned short *** info;
+	
+	info = (unsigned short***) malloc((A->iter +2)*sizeof(unsigned short**));
+	if (info  == NULL)
+	{
+		fprintf(stdout, "Error in info[][][] malloc\n");
+		exit(ERROR);
+	}
+	
+		for (i=1; i <= A->iter; i++)
+	{
+		info[i] = (unsigned short**) malloc((2)*sizeof(unsigned short*));
+		if (info[i]  == NULL)
+		{
+			fprintf(stdout, "Error in info[%d] malloc\n", i);
+			exit(ERROR);
+		}
+	}
 
 	return info;
 }
