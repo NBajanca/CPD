@@ -137,15 +137,18 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	MPI_Request request;
 	int i, j, 
 		send_id = 1, 
-		x=1, y=1;
+		x=1, y=1,
+		iter_aux= 1;
 	matrix_list *B;
-	unsigned short *info_blanck[2];
+	unsigned short *info_blanck[2], *info_aux[2];
 	unsigned short ***info;
 	
 	
 	B = initialize_matrix_list(A); //first B structure of master
 	info_blanck[0] = generate_matrix_info(B, A->size_yd+1, 1);
 	info_blanck[1] = generate_matrix_info(B, A->size_xd+1, 2);
+	info_aux[0] = generate_matrix_info(B, A->size_yd+1, 1);
+	info_aux[1] = generate_matrix_info(B, A->size_xd+1, 2);
 	
 	matrix_calc(A, B); //calc of the iteration 1
 	
@@ -156,11 +159,15 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	
 	for(i = 2; i < A->iter; i++)
 	{	
-		find_pos(A, i, &x, &y); //finds the position for the iteration that is about to send
+		info[i][0] = generate_matrix_info(B, A->size_yd+1, 1);
+		info[i][1] = generate_matrix_info(B, A->size_xd+1, 2);
 		
 		//just for debug
 		printf("info iter %d ([%d][%d]) goes to %d\n",i, x, y,send_id);
 		
+		find_pos(A, i, &x, &y); //finds the position for the iteration that is about to send
+
+		A -> matrix_dist[i] = send_id;
 		
 		//master sends the data needed to calc the [x][y] matrix to the process (send_id)
 		for (j=0; j <= A->size_yd; j++)
@@ -173,14 +180,20 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		if (send_id == p) send_id = 1;
 
 		//Master waits to receive from any slave
-		MPI_Recv(&info[1][0][j], 1,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+		MPI_Recv(&info_aux[0][0], 1,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		
+		for (iter_aux =i; iter_aux>0; iter_aux--)
+			if ( A -> matrix_dist[iter_aux] == 1) break;
+			
+		//just for debug
+		printf("info from iter %d\n",iter_aux );
+
+		info[iter_aux][0][0] = info_aux[0][0];
 		//Master receives the rest of the message from the slave that was already sending
 		for (j=1; j <= A->size_yd; j++)
-			MPI_Recv(&info[1][0][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+			MPI_Recv(&info[iter_aux][0][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
 		for (j=0; j <= A->size_xd; j++)
-			MPI_Recv(&info[1][1][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
-
+			MPI_Recv(&info[iter_aux][1][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
 	}
 	
 	//Master Kills the other processes -> End of opperation
@@ -312,6 +325,14 @@ matrix_info* initialize_matrix_info(char **argv)
 	//finds the best way to divide the matrix in small ones and changes A based on it
 	divide_by_prime(A);
 	
+	//
+	A-> matrix_dist = (unsigned short *)calloc((A->iter +1), sizeof(unsigned short));
+	if (A-> matrix_dist  == NULL)
+	{
+		fprintf(stdout, "Error in A-> matrix_dist calloc\n");
+		exit(ERROR);
+	}
+		
 	//Alocation and initialization of A->matrix_iter
 	A-> matrix_iter = (unsigned short **)calloc((A->size_x/A->size_xd +2), sizeof(unsigned short*));
 	if (A-> matrix_iter  == NULL)
