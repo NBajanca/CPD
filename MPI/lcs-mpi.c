@@ -48,6 +48,8 @@
 	short cost(int x);
 	unsigned short *generate_matrix_info(matrix_list *B, int size, int side);
 	unsigned short ***initialize_info(matrix_info *A, matrix_list *B);
+	void go_back (matrix_info *A, matrix_list *B, char *z, int *k ,int **pos_final)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   ;
+
 #endif
 
 int main (int argc, char *argv[]) 
@@ -154,10 +156,11 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	matrix_calc(A, B); //calc of the iteration 1
 	B_last = B;
 	
+	//matrix calculated print for debug porpuse
 	printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
-	for (i=0; i <=A->size_xd; i++)
+	for (i=1; i <=A->size_xd; i++)
 	{
-		for (j=0; j<= A->size_yd; j++)
+		for (j=1; j<= A->size_yd; j++)
 			printf("[%d]",B_last->matrix[i][j]);
 		printf("\n");
 	}printf("\n");
@@ -191,7 +194,7 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		MPI_Recv(&info_aux[0][0], 1,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		
 		for (iter_aux =i; iter_aux>0; iter_aux--)
-			if ( A -> matrix_dist[iter_aux] == 1) break;
+			if ( A -> matrix_dist[iter_aux] == status->MPI_SOURCE) break;
 			
 		//just for debug
 		printf("info from iter %d\n\n",iter_aux );
@@ -225,13 +228,94 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		
 	matrix_calc(A, B_last);
 	
+	//matrix calculated print for debug porpuse
 	printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
-	for (i=0; i <=A->size_xd; i++)
+	for (i=1; i <=A->size_xd; i++)
 	{
-		for (j=0; j<= A->size_yd; j++)
+		for (j=1; j<= A->size_yd; j++)
 			printf("[%d]",B_last->matrix[i][j]);
 		printf("\n");
 	}printf("\n");
+	
+	
+	//Obtain the Subsequence
+	int k=1,
+		**pos_final;
+	char *z=NULL; 
+	
+	pos_final = (int **)malloc(2*sizeof(int*));
+	if (pos_final == NULL)
+	{
+		fprintf(stdout, "Error in pos_final malloc\n");
+		exit(ERROR);
+	}
+	
+	pos_final[0] = (int *)calloc(2,sizeof(int));
+	if (pos_final == NULL)
+	{
+		fprintf(stdout, "Error in pos_final[0] calloc\n");
+		exit(ERROR);
+	}
+	pos_final[1] = (int *)calloc(2,sizeof(int));
+	if (pos_final == NULL)
+	{
+		fprintf(stdout, "Error in pos_final[1] calloc\n");
+		exit(ERROR);
+	}
+	
+	if(A->size_x<A->size_y)
+		z = malloc((A->size_x+1)*sizeof(char));
+	else
+		z = malloc((A->size_y+1)*sizeof(char));
+		
+	if (z == NULL)
+	{
+		fprintf(stdout, "Error in z malloc\n");
+		exit(ERROR);
+	}
+	
+	//last position
+	pos_final[1][0] = A->size_x;
+	pos_final[1][1] = A->size_y;
+	pos_final[0][0] = A->size_xd;
+	pos_final[0][1] = A->size_yd;
+	
+	
+	//first go_back
+	go_back (A, B_last, z, &k ,pos_final);
+	printf("[%d][%d]\n", pos_final[1][0], pos_final[1][1]);
+	
+	find_pos(A, A->iter, &x, &y);
+	
+	while (iter_aux > 1){
+	if ((pos_final[0][0] == 0) && (pos_final[0][1] == 0))
+		iter_aux = A-> matrix_iter [x-1][y-1];
+	else if (pos_final[0][0] == 0)
+		iter_aux = A-> matrix_iter [x-1][y];
+	else
+		iter_aux = A-> matrix_iter [x][y-1];
+	printf("next iter: %d\n", iter_aux);
+	break;
+	}
+	
+	iter_aux=1;
+	pos_final[1][0] = 2;
+	pos_final[1][1] = 2;
+	pos_final[0][0] = 2;
+	pos_final[0][1] = 2;
+	
+	if (iter_aux == 1)
+		go_back (A, B, z, &k ,pos_final);
+	
+	z[k]='\0';	//end vector z
+	
+	
+	printf("%d\n", k-1);
+	for(i=k-1;i>0;i--)
+		printf("%c", z[i]);
+	printf("\n");
+	
+	
 
 	//Master Kills the other processes -> End of opperation
 	for (send_id=1; send_id < p; send_id ++)
@@ -297,9 +381,9 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		
 		//matrix calculated print for debug porpuse
 		printf("matrix [%d][%d] from process: %d\n", B_last-> id[0], B_last-> id[1],id);
-		for (i=0; i <=A->size_xd; i++)
+		for (i=1; i <=A->size_xd; i++)
 		{
-			for (j=0; j<= A->size_yd; j++)
+			for (j=1; j<= A->size_yd; j++)
 				printf("[%d]",B_last->matrix[i][j]);
 			printf("\n");
 		}printf("\n");
@@ -865,4 +949,49 @@ unsigned short ***initialize_info(matrix_info *A, matrix_list *B)
 	}
 
 	return info;
+}
+
+void go_back (matrix_info *A, matrix_list *B, char *z, int *k ,int **pos_final)
+{
+	int i, j, i2, j2;
+	
+	i = pos_final[0][0];
+	j= pos_final[0][1];
+	i2 = pos_final[1][0];
+	j2= pos_final[1][1];
+	
+	while((i>0)&&(j>0))
+	{
+			
+		if (A->x[i2-1]==A->y[j2-1]) //match
+		{	
+			z[*k]=A->x[i2-1];
+			i=i-1;
+			i2=i2-1;
+			j=j-1;
+			j2=j2-1;
+			printf("%d -> %c; ", *k, z[*k]);
+			*k+=1;
+		}
+			
+		else
+		{							//	computation of LCS from matrix
+			
+			if(B->matrix[i-1][j]>B->matrix[i][j-1])
+			{
+				i=i-1;	//up
+				i2=i2-1;
+			}
+			else
+			{
+				j=j-1;	//left
+				j2=j2-1;
+			}	
+		}
+	}
+	pos_final[0][0] = i;
+	pos_final[0][1] = j;
+	pos_final[1][0] = i2;
+	pos_final[1][1] = j2;
+	printf("\n\n");
 }
