@@ -139,20 +139,28 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		send_id = 1, 
 		x=1, y=1,
 		iter_aux= 1;
-	matrix_list *B;
+	matrix_list *B, *B_last, *B_aux;
 	unsigned short *info_blanck[2], *info_aux[2];
 	unsigned short ***info;
 	
+	info = initialize_info(A, B);
 	
 	B = initialize_matrix_list(A); //first B structure of master
-	info_blanck[0] = generate_matrix_info(B, A->size_yd+1, 1);
-	info_blanck[1] = generate_matrix_info(B, A->size_xd+1, 2);
+	info[0][0] = generate_matrix_info(B, A->size_yd+1, 1);
+	info[0][1] = generate_matrix_info(B, A->size_xd+1, 2);
 	info_aux[0] = generate_matrix_info(B, A->size_yd+1, 1);
 	info_aux[1] = generate_matrix_info(B, A->size_xd+1, 2);
 	
 	matrix_calc(A, B); //calc of the iteration 1
+	B_last = B;
 	
-	info = initialize_info(A, B);
+	printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
+	for (i=0; i <=A->size_xd; i++)
+	{
+		for (j=0; j<= A->size_yd; j++)
+			printf("[%d]",B_last->matrix[i][j]);
+		printf("\n");
+	}printf("\n");
 	
 	info[1][0] = generate_matrix_info(B, A->size_yd+1, 1);
 	info[1][1] = generate_matrix_info(B, A->size_xd+1, 2);
@@ -161,19 +169,19 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	{	
 		info[i][0] = generate_matrix_info(B, A->size_yd+1, 1);
 		info[i][1] = generate_matrix_info(B, A->size_xd+1, 2);
-		
-		//just for debug
-		printf("info iter %d ([%d][%d]) goes to %d\n",i, x, y,send_id);
-		
+			
 		find_pos(A, i, &x, &y); //finds the position for the iteration that is about to send
-
 		A -> matrix_dist[i] = send_id;
 		
+		
+		iter_aux = A-> matrix_iter [x-1][y];
 		//master sends the data needed to calc the [x][y] matrix to the process (send_id)
 		for (j=0; j <= A->size_yd; j++)
-			MPI_Send(&info_blanck[0][j], 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
+			MPI_Send(&info[iter_aux][0][j], 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
+		
+		iter_aux = A-> matrix_iter [x][y-1];
 		for (j=0; j <= A->size_xd; j++)
-			MPI_Send(&info[1][1][j], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
+			MPI_Send(&info[iter_aux][1][j], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
 		
 		//Next process
 		send_id = send_id+1;
@@ -186,7 +194,7 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 			if ( A -> matrix_dist[iter_aux] == 1) break;
 			
 		//just for debug
-		printf("info from iter %d\n",iter_aux );
+		printf("info from iter %d\n\n",iter_aux );
 
 		info[iter_aux][0][0] = info_aux[0][0];
 		//Master receives the rest of the message from the slave that was already sending
@@ -194,8 +202,37 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 			MPI_Recv(&info[iter_aux][0][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
 		for (j=0; j <= A->size_xd; j++)
 			MPI_Recv(&info[iter_aux][1][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
-	}
 	
+
+	}	
+	
+	//Calc of last iteration
+	find_pos(A, A->iter, &x, &y);
+	B_aux = initialize_matrix_list(A);
+	B_last->next = B_aux;
+	B_last = B_aux;
+	
+	B_last-> id[0] = x;
+	B_last-> id[1] = y;
+	
+	iter_aux = A-> matrix_iter [x-1][y];
+	for (j=0; j <= A->size_yd; j++)
+		B_last->matrix[0][j] = info[iter_aux][0][j];
+		
+	iter_aux = A-> matrix_iter [x][y-1];
+	for (j=0; j <= A->size_xd; j++)
+		B_last->matrix[j][0] = info[iter_aux][1][j];
+		
+	matrix_calc(A, B_last);
+	
+	printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
+	for (i=0; i <=A->size_xd; i++)
+	{
+		for (j=0; j<= A->size_yd; j++)
+			printf("[%d]",B_last->matrix[i][j]);
+		printf("\n");
+	}printf("\n");
+
 	//Master Kills the other processes -> End of opperation
 	for (send_id=1; send_id < p; send_id ++)
 	{
@@ -265,7 +302,7 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 			for (j=0; j<= A->size_yd; j++)
 				printf("[%d]",B_last->matrix[i][j]);
 			printf("\n");
-		}
+		}printf("\n");
 		
 		//Send results to master
 		for (j=0; j <= A->size_yd; j++)
@@ -702,12 +739,17 @@ matrix_list* initialize_matrix_list(matrix_info *A)
  */
 void matrix_calc(matrix_info *A, matrix_list *B)
 {
-	int i, j;
+	int i, j,
+		id[2];
+	
+	id[0] = 1 + (B-> id[0]-1)*A->size_xd;
+	id[1] = 1 + (B-> id[1]-1)*A->size_yd; 
+	
 	for(i = 1;i <= A->size_xd;i++)
 	{
 		for(j =1 ;j<= A->size_yd;j++)
 		{
-			if (A->x[B-> id[0]+ i-2]==A->y[B-> id[1] + j-2]) 				//	computation of matrix c
+			if (A->x[id[0]+ i-2]==A->y[id[1] + j-2]) 				//	computation of matrix c
 				B->matrix[i][j] = B->matrix[i-1][j-1]+ cost(i); //match
 			else 
 				B->matrix[i][j] = max(B->matrix[i][j-1],B->matrix[i-1][j]);
@@ -812,7 +854,7 @@ unsigned short ***initialize_info(matrix_info *A, matrix_list *B)
 		exit(ERROR);
 	}
 	
-		for (i=1; i <= A->iter; i++)
+		for (i=0; i <= A->iter; i++)
 	{
 		info[i] = (unsigned short**) malloc((2)*sizeof(unsigned short*));
 		if (info[i]  == NULL)
