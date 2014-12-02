@@ -289,55 +289,66 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	pos_final[1][1] = A->size_y;
 	pos_final[0][0] = A->size_xd;
 	pos_final[0][1] = A->size_yd;
-	
+	/*printf("[%d][%d] -> [%d][%d]\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);*/
 	
 	//first go_back
 	go_back (A, B_last, z, &k ,pos_final);
 	
+	/*printf("[%d][%d] -> [%d][%d]\n\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);*/
 	find_pos(A, A->iter, &x, &y);
 	
 	if (pos_final[0][0] == 0)
 		x = x-1;
 	if (pos_final[0][1] == 0)
 		y = y-1;
-		
+	
+	//finds the process that has the matrix wanted		
 	iter_aux = A-> matrix_iter [x][y];
 	send_id = A->matrix_dist[iter_aux];
 	
 	
 	while (iter_aux > 1){
+		//sends the position on the "c" matrix and the cordinates for the matrix_dist
 		MPI_Send(&pos_final[1][0], 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
 		MPI_Send(&pos_final[1][1], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
 		
+		//receives the position on the "c" matrix and the cordinates for the matrix_dist
 		MPI_Recv(&pos_final[1][0], 1,  MPI_UNSIGNED_SHORT, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		x = status->MPI_TAG;
 		
 		MPI_Recv(&pos_final[1][1], 1,  MPI_UNSIGNED_SHORT, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		y = status->MPI_TAG;
 		
+		//receives the string with the matches
 		MPI_Recv(&k_aux, 1,  MPI_UNSIGNED_SHORT, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		for (i = 0;i < k_aux; i ++)
 			MPI_Recv(&z_aux[i], 1,  MPI_CHAR, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		
+		//print received for debug
+		/*for (i = 0;i < k_aux; i ++)
+			printf("%d -> %c from %d\n", i , z_aux[i], send_id);
+		*/
 		for (i = 0;i < k_aux; i ++)
 		{
-			z[k] = z_aux[i];
-			k++;
+			z[k] = z_aux[i]; //adds the last matches to the vector
+			k++; //increments the number of the matches
 		}
 		
+		//finds the process that has the matrix wanted	
 		iter_aux = A-> matrix_iter [x][y];
 		send_id = A->matrix_dist[iter_aux];
 	}
 	
-	iter_aux=1;
-	pos_final[1][0] = 2;
-	pos_final[1][1] = 2;
-	pos_final[0][0] = 2;
-	pos_final[0][1] = 2;
+	pos_final[0][0] = x * A->size_xd -(A->size_xd -1);
+	pos_final[0][1] = y * A->size_yd -(A->size_yd -1);
+	pos_final[0][0] = pos_final[1][0] - pos_final[0][0] + 1;
+	pos_final[0][1] = pos_final[1][1] - pos_final[0][1] + 1;
 	
+	/*printf("[%d][%d] -> [%d][%d]\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);*/
 	if (iter_aux == 1)
 		go_back (A, B, z, &k ,pos_final);
 	
+	/*printf("[%d][%d] -> [%d][%d]\n\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);	*/	
 	z[k]='\0';	//end vector z
 	
 	
@@ -411,8 +422,8 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 			for (j=1; j<= A->size_yd; j++)
 				printf("[%d]",B_last->matrix[i][j]);
 			printf("\n");
-		}printf("\n");*/
-		
+		}printf("\n");
+		*/
 		//Send results to master
 		for (j=0; j <= A->size_yd; j++)
 			MPI_Send(&B_last->matrix[A->size_xd][j], 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
@@ -450,10 +461,11 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		exit(ERROR);
 	}
 	
-	if(A->size_x<A->size_y)
-		z = malloc((A->size_x+1)*sizeof(char));
+	//Alocs z matrix where each string is going to be stored
+	if(A->size_xd<A->size_yd)
+		z = malloc((A->size_xd+1)*sizeof(char));
 	else
-		z = malloc((A->size_y+1)*sizeof(char));
+		z = malloc((A->size_yd+1)*sizeof(char));
 	if (z == NULL)
 	{
 		fprintf(stdout, "Error in z malloc\n");
@@ -462,7 +474,8 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 
 	while(1) //Runs until master sends info to stop
 	{
-		k=0;
+		k=0; //no match
+		
 		MPI_Recv(&pos_final[1][0], 1, MPI_UNSIGNED_SHORT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		x = status->MPI_TAG;
 		
@@ -472,19 +485,24 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		//receives info from master to stop this operation and jump to the next
 		if (status->MPI_TAG == JUMPTAG) 
 			break;
-
-		pos_final[0][0] = x * A->size_xd -1;
-		pos_final[0][1] = y * A->size_yd -1;
+		
+		// from x and y (cordinates in matrix_iter) finds the real position in matrix ([1][1])
+		pos_final[0][0] = x * A->size_xd -(A->size_xd -1);
+		pos_final[0][1] = y * A->size_yd -(A->size_yd -1);
+		
+		//from the position in the "c" matrix finds the real position to start in matrix
 		pos_final[0][0] = pos_final[1][0] - pos_final[0][0] + 1;
 		pos_final[0][1] = pos_final[1][1] - pos_final[0][1] + 1;
-		
+		/*printf("[%d][%d] -> [%d][%d] in %d\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1], id);*/
 		B_aux = B;
+		
 		while(B_aux -> next != NULL)
 		{
 			if ((B_aux -> id[0] == x) && (B_aux -> id[1] == y)) break;
 			B_aux = B_aux -> next;
 		}
 		
+		//runs he matrix backwards
 		go_back (A, B_aux, z, &k ,pos_final);
 		
 		if (pos_final[0][0] == 0)
@@ -492,15 +510,36 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		if (pos_final[0][1] == 0)
 			y = y-1;
 		
+		// sends the positions and the matrix
 		MPI_Send(&pos_final[1][0], 1,  MPI_UNSIGNED_SHORT,0, x, MPI_COMM_WORLD);
 		MPI_Send(&pos_final[1][1], 1,  MPI_UNSIGNED_SHORT, 0, y, MPI_COMM_WORLD);
 		MPI_Send(&k, 1,  MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
 		for (i = 0;i < k; i ++)
 			MPI_Send(&z[i], 1,  MPI_CHAR, 0, id, MPI_COMM_WORLD);
+		/*printf("[%d][%d] -> [%d][%d]\n\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);	*/
 	}
 
 }
 
+/* jump_process(A, p)
+ * 
+ * Input:
+ *			A -> structure matrix_info
+ * 			p -> number of processes
+ * 
+ * Output:
+ * 			None
+ * 
+ * Changes:
+ * 			Nothing
+ * 
+ * Description:
+ * 			This function sends trash message with a JUMPTAG to slave that makes it jump to the next task
+ * 
+ * Notes:
+ * 			This function is only run by the master (process id==0)			
+ * 
+ */
 void jump_process(matrix_info *A, int p)
 {
 	int j, send_id;
@@ -1077,10 +1116,12 @@ void go_back (matrix_info *A, matrix_list *B, char *z, int *k ,int **pos_final)
 		if (A->x[i2-1]==A->y[j2-1]) //match
 		{	
 			z[*k]=A->x[i2-1];
+			/*printf("%d -> %c; ", *k, A->x[i2-1]);*/
 			i=i-1;
 			i2=i2-1;
 			j=j-1;
 			j2=j2-1;
+			
 			*k+=1;
 		}
 			
@@ -1099,6 +1140,7 @@ void go_back (matrix_info *A, matrix_list *B, char *z, int *k ,int **pos_final)
 			}	
 		}
 	}
+	/*printf("\n");*/
 	pos_final[0][0] = i;
 	pos_final[0][1] = j;
 	pos_final[1][0] = i2;
