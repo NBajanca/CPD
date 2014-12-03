@@ -47,7 +47,7 @@
 	matrix_list* initialize_matrix_list(matrix_info *A);
 	void matrix_calc(matrix_info *A, matrix_list *B);
 	short cost(int x);
-	unsigned short *generate_matrix_info(matrix_list *B, int size, int side);
+	unsigned short *generate_matrix_info(matrix_list *B, int size, int size_ref, int side);
 	unsigned short ***initialize_info(matrix_info *A, matrix_list *B);
 	void go_back (matrix_info *A, matrix_list *B, char *z, int *k ,int **pos_final)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   ;
 
@@ -78,15 +78,12 @@ int main (int argc, char *argv[])
 	A = initialize_matrix_info(argv);
 	
 	//Only for the master, prints matrix info -> debug only
-	/*if (!id)
+	if (!id)
 	{
 		printf("sixe_x: %d, size_y: %d\n", A->size_x, A->size_y );
 		printf("sixe_xd: %d, size_yd: %d\n", A->size_xd, A->size_yd );
 		printf("x: %s\ny: %s\n", A->x,A->y );
-	}*/
-	
-	//number of iterations
-	A -> iter = ((A->size_x)/(A->size_xd))*((A->size_y)/(A->size_yd));
+	}
 	
 	//allocs and initializes the A-> matrix_dist
 	A-> matrix_dist = (unsigned short *)calloc((A -> iter +1), sizeof(unsigned short));
@@ -146,38 +143,55 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	unsigned short *info_blanck[2], *info_aux[2];
 	unsigned short ***info;
 	
+	//Print iteraction matrix
+	for(i=0;i<=A->size_x/A->size_xd;i++)
+	{
+		for(j=0; j<=A->size_y/A->size_yd;j++)
+		{
+			printf("[%d]", A-> matrix_iter [i][j]);
+		}
+		printf ("\n");
+	}
+	
 	info = initialize_info(A, B);
 	
 	B = initialize_matrix_list(A); //first B structure of master
-	info[0][0] = generate_matrix_info(B, A->size_yd+1, 1);
-	info[0][1] = generate_matrix_info(B, A->size_xd+1, 2);
-	info_aux[0] = generate_matrix_info(B, A->size_yd+1, 1);
-	info_aux[1] = generate_matrix_info(B, A->size_xd+1, 2);
+	info[0][0] = generate_matrix_info(B, A->size_yd, A->size_xd, 1);
+	info[0][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
+	info_aux[0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
+	info_aux[1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
 	
 	matrix_calc(A, B); //calc of the iteration 1
 	B_last = B;
 	
 	//matrix calculated print for debug porpuse
-	/*printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
+	printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
 	for (i=1; i <=A->size_xd; i++)
 	{
 		for (j=1; j<= A->size_yd; j++)
 			printf("[%d]",B_last->matrix[i][j]);
 		printf("\n");
-	}printf("\n");*/
+	}printf("\n");
 	
-	info[1][0] = generate_matrix_info(B, A->size_yd+1, 1);
-	info[1][1] = generate_matrix_info(B, A->size_xd+1, 2);
+	info[1][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
+	info[1][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
+	
+	for (j=0; j <= A->size_yd; j++)
+		info[1][0][j];
+	
+	for (j=0; j <= A->size_xd; j++)
+		info[1][1][j];
+
 	
 	for(i = 2; i < A->iter; i++)
 	{	
-		info[i][0] = generate_matrix_info(B, A->size_yd+1, 1);
-		info[i][1] = generate_matrix_info(B, A->size_xd+1, 2);
+		info[i][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
+		info[i][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
 			
 		find_pos(A, i, &x, &y); //finds the position for the iteration that is about to send
 		A -> matrix_dist[i] = send_id;
 		
-		
+		printf("iter = %d to proc = %d\n", i, send_id);
 		iter_aux = A-> matrix_iter [x-1][y];
 		//master sends the data needed to calc the [x][y] matrix to the process (send_id)
 		for (j=0; j <= A->size_yd; j++)
@@ -228,13 +242,13 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	matrix_calc(A, B_last);
 	
 	//matrix calculated print for debug porpuse
-	/*printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
+	printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
 	for (i=1; i <=A->size_xd; i++)
 	{
 		for (j=1; j<= A->size_yd; j++)
 			printf("[%d]",B_last->matrix[i][j]);
 		printf("\n");
-	}printf("\n");*/
+	}printf("\n");
 	
 	
 	//Obtain the Subsequence
@@ -416,14 +430,14 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		matrix_calc(A, B_last);
 		
 		//matrix calculated print for debug porpuse
-		/*printf("matrix [%d][%d] from process: %d\n", B_last-> id[0], B_last-> id[1],id);
+		printf("matrix [%d][%d] from process: %d\n", B_last-> id[0], B_last-> id[1],id);
 		for (i=1; i <=A->size_xd; i++)
 		{
 			for (j=1; j<= A->size_yd; j++)
 				printf("[%d]",B_last->matrix[i][j]);
 			printf("\n");
 		}printf("\n");
-		*/
+		
 		//Send results to master
 		for (j=0; j <= A->size_yd; j++)
 			MPI_Send(&B_last->matrix[A->size_xd][j], 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
@@ -547,7 +561,7 @@ void jump_process(matrix_info *A, int p)
 	{
 		for (j=0; j <= A->size_yd; j++)
 			MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
-		for (j=0; j <= A->size_yd; j++)
+		for (j=0; j <= A->size_xd; j++)
 			MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
 	}
 }
@@ -595,6 +609,9 @@ matrix_info* initialize_matrix_info(char **argv)
 	
 	//finds the best way to divide the matrix in small ones and changes A based on it
 	divide_by_prime(A);
+	
+	//number of iterations
+	A -> iter = ((A->size_x)/(A->size_xd))*((A->size_y)/(A->size_yd));
 	
 	//
 	A-> matrix_dist = (unsigned short *)calloc((A->iter +1), sizeof(unsigned short));
@@ -653,7 +670,7 @@ void read_file(char **argv, matrix_info *A)
 {
 	FILE * f;
 	char *buffer;
-	int i, j;
+	int i, j, a, b;
 	int size_xx, size_yy;
 	
 	f = fopen(argv[1], "r");
@@ -672,16 +689,17 @@ void read_file(char **argv, matrix_info *A)
 	
 	//Reading input file
 	fgets(buffer, SIZE_BUFFER_0, f);
-	sscanf(buffer,"%d %d", &(*A).size_x, &(*A).size_y);
+	sscanf(buffer,"%d %d", &a, &b);
+	
+	(*A).size_x = max(a,b);
+	(*A).size_y = min(a,b);
 	
 	size_xx = ((*A).size_x+ SIZE_BUFFER)*sizeof(char);
 	size_yy = ((*A).size_y+ SIZE_BUFFER)*sizeof(char);
-	
+		
 	//buffer reallocated to the size (plus some margin) of the biggest line
-	if((*A).size_x<(*A).size_y) 
-		buffer = realloc(buffer, size_yy);
-	else
-		buffer = realloc(buffer, size_xx);
+	
+	buffer=realloc(buffer, max(size_xx, size_yy));
 		
 	if (buffer == NULL)
 	{
@@ -689,24 +707,35 @@ void read_file(char **argv, matrix_info *A)
 		exit(ERROR);
 	}
 						
-	(*A).x = malloc(((*A).size_x+1)*sizeof(char));  
+	(*A).x = malloc((max((*A).size_x, (*A).size_y)+1)*sizeof(char));  
 	if ((*A).x == NULL)
 	{
 		fprintf(stdout, "Error in x malloc\n");
 		exit(ERROR);
 	}
-	fgets(buffer, size_xx, f); 
-	sscanf(buffer, "%s\n", (*A).x);
-	
-	(*A).y = malloc(((*A).size_y+1)*sizeof(char));
+	(*A).y = malloc((min((*A).size_x, (*A).size_y)+1)*sizeof(char));
 	if ((*A).y == NULL)
 	{
 		fprintf(stdout, "Error in y malloc\n");
 		exit(ERROR);
 	}
-	fgets(buffer, size_yy,  f);
-	sscanf(buffer, "%s\n", (*A).y);
+	
+	if(a>=b)
+	{
+		fgets(buffer, size_xx, f);
+		sscanf(buffer, "%s\n", (*A).x);
+		fgets(buffer, size_yy,  f);
+		sscanf(buffer, "%s\n", (*A).y);
+	}
+	else
+	{
+		fgets(buffer, size_xx, f);
+		sscanf(buffer, "%s\n", (*A).y);
+		fgets(buffer, size_yy,  f);
+		sscanf(buffer, "%s\n", (*A).x);
+	}
 
+	//printf("x= %s\ny= %s\n", (*A).x, (*A).y);
 	
 }
 
@@ -781,90 +810,43 @@ void matrix_iter(matrix_info *A)
 	size_y = A->size_y/A->size_yd;
 	int i, j, h, iter = 1;
 	
-	if (size_x != size_y) // Está a funcionar apenas para matrizes com size_x = size_y
-	{
-		printf("nao implementado, so size_x = size_y\n");
-		exit(0);
-	}
-	
-	for( h=1; h<=min(size_x, size_y); h++)
-	{	
-		
-		for(j=h; j>0; j--)
-		{
-			i=h-j+1;
-			A-> matrix_iter [i][j] = iter;
-			//printf("1 -> iter:%d -> pos: [%d][%d] ", iter, i, j);
-			iter ++;
-			
-		}
-		
-	}
-	//printf("\n");
-	
-	if(size_x<=size_y)
-	{
-		
-		for(h=1; h<=size_y-size_x; h++)
-		{
-			for(i=size_x ; i>0; i--)
+	printf("size_x = %d, size_y= %d\n", size_x, size_y);
+	printf("A->size_x = %d, A->size_y= %d\n", A->size_x,A->size_y);
+	printf("A->size_xd = %d, A->size_yd= %d\n", A->size_xd,A->size_yd);
+	printf("1\n");
+	if(size_x==size_y){
+		printf("2\n");
+		for(h=1; h<=size_y; h++)		
+			for(i=1, j=h; j>0; i++, j--)
 			{
-				j=h-i+size_x;
 				A-> matrix_iter [i][j] = iter;
-				//printf("2 -> iter:%d -> pos: [%d][%d] ", iter, i, j);
 				iter ++;
-					
-			}
-		}
-		//printf("\n");
-		for( h=size_y-size_x+2; h<=size_y; h++)
-		{
-			for(i=h; i<=size_y; i++)
+			}printf("3\n");
+		for(h=size_y+1; h<size_y+size_x; h++)
+			for(i=h-size_y+1, j=size_x; i<=size_x; j--, i++)
 			{
-				j=h-i+size_x;
 				A-> matrix_iter [i][j] = iter;
-				//printf("3 -> iter:%d -> pos: [%d][%d] ", iter, i, j);
 				iter ++;
-			}
-		
-		}
-		//printf("\n");
+			}printf("4\n");
 	}
-	
 	else
-	{
-		for(h=1; h<=size_x-size_y; h++)
-		{
-			for(j=size_y ; j>0; j--)
-			{
-				i=h-j+size_y;
+	{printf("5\n");
+		for(h=1; h<=size_y; h++)
+			for(i=1, j=h; j>0; i++, j--)
+			{printf("i = %d, h = %d\n",i, h);
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}
-		}
-		
-		for( h=size_x-size_y+1; h<=size_x; h++)
-		{
-			for(i=h; i<=size_x; i++)
+			}printf("6\n");
+		for(h=size_y+1; h<=size_x+size_y; h++)
+			for(i=h-size_y+1, j=size_y; j>0 && i<=size_x; i++, j--)
 			{
-				j=h-i+size_y;
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}
-		
-		}
+			}printf("7\n");
 	}
-	
-	//Print iteraction matrix
-	/*for(i=1;i< A->size_x/A->size_xd +1;i++)
-	{
-		for(j=1;j< A->size_y/A->size_yd +1;j++)
-		{
-			printf("[%d]", A-> matrix_iter [i][j]);
-		}
-		printf ("\n");
-	}*/
+	printf("8\n");
 }
+
 
 /* find_pos(A, iter, x, y)
  * 
@@ -1036,7 +1018,7 @@ short cost(int x)
  * Notes:
  * 
  */
-unsigned short *generate_matrix_info(matrix_list *B, int size, int side)
+unsigned short *generate_matrix_info(matrix_list *B, int size, int size_ref, int side)
 {
 	unsigned short *info;
 	int i;
@@ -1044,16 +1026,16 @@ unsigned short *generate_matrix_info(matrix_list *B, int size, int side)
 	info = (unsigned short *)calloc((size+1), sizeof(unsigned short));
 	if (info  == NULL)
 	{
-		fprintf(stdout, "Error in info[] malloc\n");
+		printf( "Error in info[] malloc\n");
 		exit(ERROR);
 	}
 	
-	for (i = 0; i < size; i++)
+	for (i = 0; i <= size; i++)
 	{
-		if(side == 1) info[i] = B->matrix[size-1][i];
-		if(side == 2) info[i] = B->matrix[i][size-1];
+		if(side == 1) info[i] = B->matrix[size_ref][i];
+		if(side == 2) info[i] = B->matrix[i][size_ref];
 	} 
-
+	
 	return info;
 }
 
