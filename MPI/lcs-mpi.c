@@ -165,13 +165,13 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	B_last = B;
 	
 	//matrix calculated print for debug porpuse
-	printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
+	/*printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
 	for (i=1; i <=A->size_xd; i++)
 	{
 		for (j=1; j<= A->size_yd; j++)
 			printf("[%d]",B_last->matrix[i][j]);
 		printf("\n");
-	}printf("\n");
+	}printf("\n");*/
 	
 	info[1][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
 	info[1][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
@@ -191,7 +191,7 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		find_pos(A, i, &x, &y); //finds the position for the iteration that is about to send
 		A -> matrix_dist[i] = send_id;
 		
-		printf("iter = %d to proc = %d\n", i, send_id);
+		//printf("iter = %d to proc = %d\n", i, send_id);
 		iter_aux = A-> matrix_iter [x-1][y];
 		//master sends the data needed to calc the [x][y] matrix to the process (send_id)
 		for (j=0; j <= A->size_yd; j++)
@@ -242,14 +242,16 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	matrix_calc(A, B_last);
 	
 	//matrix calculated print for debug porpuse
-	printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
+	/*printf("matrix [%d][%d] from process: 0\n", B_last-> id[0], B_last-> id[1]);
 	for (i=1; i <=A->size_xd; i++)
 	{
 		for (j=1; j<= A->size_yd; j++)
 			printf("[%d]",B_last->matrix[i][j]);
 		printf("\n");
-	}printf("\n");
+	}printf("\n");*/
 	
+	
+	//printf("Final subsequence\n");
 	
 	//Obtain the Subsequence
 	int k=1, k_aux,
@@ -303,28 +305,39 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	pos_final[1][1] = A->size_y;
 	pos_final[0][0] = A->size_xd;
 	pos_final[0][1] = A->size_yd;
-	/*printf("[%d][%d] -> [%d][%d]\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);*/
+	//printf(" pos_final[1][0]:[%d]\n pos_final[1][1]:[%d]\n pos_final[0][0]:[%d]\n pos_final[0][1]:[%d]\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);
 	
 	//first go_back
 	go_back (A, B_last, z, &k ,pos_final);
 	
-	/*printf("[%d][%d] -> [%d][%d]\n\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);*/
+	//printf("Go back\n");
+	//printf(" pos_final[1][0]:[%d]\n pos_final[1][1]:[%d]\n pos_final[0][0]:[%d]\n pos_final[0][1]:[%d]\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);
+	
 	find_pos(A, A->iter, &x, &y);
+	
+	//printf("x:%d\ny:%d\n",x,y);
 	
 	if (pos_final[0][0] == 0)
 		x = x-1;
 	if (pos_final[0][1] == 0)
 		y = y-1;
 	
+	//printf("x:%d\ny:%d\n",x,y);
+	
 	//finds the process that has the matrix wanted		
 	iter_aux = A-> matrix_iter [x][y];
 	send_id = A->matrix_dist[iter_aux];
-	
+
+	//printf("iter_aux:%d\nsend_id:%d\n",iter_aux,send_id);	
 	
 	while (iter_aux > 1){
+		//printf("1\n");
 		//sends the position on the "c" matrix and the cordinates for the matrix_dist
 		MPI_Send(&pos_final[1][0], 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
+		//printf("2\n");
 		MPI_Send(&pos_final[1][1], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
+		
+		//printf("3\n");
 		
 		//receives the position on the "c" matrix and the cordinates for the matrix_dist
 		MPI_Recv(&pos_final[1][0], 1,  MPI_UNSIGNED_SHORT, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
@@ -333,11 +346,13 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		MPI_Recv(&pos_final[1][1], 1,  MPI_UNSIGNED_SHORT, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		y = status->MPI_TAG;
 		
+		//printf("send id= %d\n", send_id);
 		//receives the string with the matches
-		MPI_Recv(&k_aux, 1,  MPI_UNSIGNED_SHORT, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+		MPI_Recv(&k_aux, 1,  MPI_INT, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+		//printf("k_aux= %d\n", k_aux);
 		for (i = 0;i < k_aux; i ++)
 			MPI_Recv(&z_aux[i], 1,  MPI_CHAR, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
-		
+		//printf("4\n");
 		//print received for debug
 		/*for (i = 0;i < k_aux; i ++)
 			printf("%d -> %c from %d\n", i , z_aux[i], send_id);
@@ -347,7 +362,7 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 			z[k] = z_aux[i]; //adds the last matches to the vector
 			k++; //increments the number of the matches
 		}
-		
+		//printf("5\n");
 		//finds the process that has the matrix wanted	
 		iter_aux = A-> matrix_iter [x][y];
 		send_id = A->matrix_dist[iter_aux];
@@ -430,13 +445,13 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		matrix_calc(A, B_last);
 		
 		//matrix calculated print for debug porpuse
-		printf("matrix [%d][%d] from process: %d\n", B_last-> id[0], B_last-> id[1],id);
+		/*printf("matrix [%d][%d] from process: %d\n", B_last-> id[0], B_last-> id[1],id);
 		for (i=1; i <=A->size_xd; i++)
 		{
 			for (j=1; j<= A->size_yd; j++)
 				printf("[%d]",B_last->matrix[i][j]);
 			printf("\n");
-		}printf("\n");
+		}printf("\n");*/
 		
 		//Send results to master
 		for (j=0; j <= A->size_yd; j++)
@@ -489,13 +504,13 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 	while(1) //Runs until master sends info to stop
 	{
 		k=0; //no match
-		
+		//printf("slave [%d] 1\n", id);
 		MPI_Recv(&pos_final[1][0], 1, MPI_UNSIGNED_SHORT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		x = status->MPI_TAG;
-		
+		//printf("slave [%d] 2\n", id);
 		MPI_Recv(&pos_final[1][1], 1, MPI_UNSIGNED_SHORT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		y = status->MPI_TAG;	
-			
+		//printf("slave [%d] 3\n", id);
 		//receives info from master to stop this operation and jump to the next
 		if (status->MPI_TAG == JUMPTAG) 
 			break;
@@ -509,7 +524,7 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		pos_final[0][1] = pos_final[1][1] - pos_final[0][1] + 1;
 		/*printf("[%d][%d] -> [%d][%d] in %d\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1], id);*/
 		B_aux = B;
-		
+		//printf("slave [%d] 4\n", id);
 		while(B_aux -> next != NULL)
 		{
 			if ((B_aux -> id[0] == x) && (B_aux -> id[1] == y)) break;
@@ -523,14 +538,17 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 			x = x-1;
 		if (pos_final[0][1] == 0)
 			y = y-1;
-		
+		//printf("slave [%d] 5\n", id);
 		// sends the positions and the matrix
 		MPI_Send(&pos_final[1][0], 1,  MPI_UNSIGNED_SHORT,0, x, MPI_COMM_WORLD);
 		MPI_Send(&pos_final[1][1], 1,  MPI_UNSIGNED_SHORT, 0, y, MPI_COMM_WORLD);
-		MPI_Send(&k, 1,  MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
+		
+		MPI_Send(&k, 1,  MPI_INT, 0, id, MPI_COMM_WORLD);
+		//printf("k slave= %d\n", k);
 		for (i = 0;i < k; i ++)
 			MPI_Send(&z[i], 1,  MPI_CHAR, 0, id, MPI_COMM_WORLD);
 		/*printf("[%d][%d] -> [%d][%d]\n\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);	*/
+		//printf("slave [%d] 6\n", id);
 	}
 
 }
@@ -761,23 +779,24 @@ void read_file(char **argv, matrix_info *A)
  */
 void divide_by_prime(matrix_info *A)
 {
-	int i,
-		prime_num[10]={2,3,5,7,11,13,17,19,23,29};
+	int i, line_div,
+		prime_num[11]={2,3,5,7,10,11,13,17,19,23,29};
 	
 	//lines
-	for (i=0; i<10; i++)
+	for (i=0; i<11; i++)
 	{
 		if (((*A).size_x % prime_num[i]) == 0) //checks if the rest is zero
 		{
 			(*A).size_xd = prime_num[i];
+			line_div=prime_num[i];
 			break;
 		}
 	}
 	
 	//collums
-	for (i=0; i<10; i++)
+	for (i=0; i<11; i++)
 	{
-		if (((*A).size_y % prime_num[i]) == 0)
+		if (((*A).size_y % prime_num[i]) == 0 && prime_num[i]>=line_div)
 		{
 			(*A).size_yd = prime_num[i];
 			break;
@@ -810,41 +829,41 @@ void matrix_iter(matrix_info *A)
 	size_y = A->size_y/A->size_yd;
 	int i, j, h, iter = 1;
 	
-	printf("size_x = %d, size_y= %d\n", size_x, size_y);
+	/*printf("size_x = %d, size_y= %d\n", size_x, size_y);
 	printf("A->size_x = %d, A->size_y= %d\n", A->size_x,A->size_y);
 	printf("A->size_xd = %d, A->size_yd= %d\n", A->size_xd,A->size_yd);
-	printf("1\n");
+	printf("1\n");*/
 	if(size_x==size_y){
-		printf("2\n");
+		//*printf("2\n");
 		for(h=1; h<=size_y; h++)		
 			for(i=1, j=h; j>0; i++, j--)
 			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}printf("3\n");
+			}//printf("3\n");
 		for(h=size_y+1; h<size_y+size_x; h++)
 			for(i=h-size_y+1, j=size_x; i<=size_x; j--, i++)
 			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}printf("4\n");
+			}//printf("4\n");
 	}
 	else
-	{printf("5\n");
+	{//printf("5\n");
 		for(h=1; h<=size_y; h++)
 			for(i=1, j=h; j>0; i++, j--)
-			{printf("i = %d, h = %d\n",i, h);
+			{//printf("i = %d, h = %d\n",i, h);
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}printf("6\n");
+			}//printf("6\n");
 		for(h=size_y+1; h<=size_x+size_y; h++)
 			for(i=h-size_y+1, j=size_y; j>0 && i<=size_x; i++, j--)
 			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}printf("7\n");
+			}//printf("7\n");
 	}
-	printf("8\n");
+	//printf("8\n");
 }
 
 
