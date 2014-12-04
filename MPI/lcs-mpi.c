@@ -37,7 +37,6 @@
 	void master_io(int p, MPI_Status *status, matrix_info *A);
 	void slave_io(int id, int p, MPI_Status *status, matrix_info *A);
 	void jump_process(matrix_info *A, int p);
-	void jump_process_end(matrix_info *A, int p);
 
 	matrix_info* initialize_matrix_info(char **argv);
 	void read_file(char **argv, matrix_info *A);
@@ -108,7 +107,7 @@ int main (int argc, char *argv[])
 		printf ("Average time per Iteration/Process = %12.6f sec\n",	secs/(A->iter/p));
   	}*/
 
-	//printf("Returned to main!\n");
+	printf("Returned to main!\n");
 
    	MPI_Finalize();
    	return 0;
@@ -145,8 +144,6 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	matrix_list *B, *B_last, *B_aux;
 	unsigned short *info_blanck[2], *info_aux[2];
 	unsigned short ***info;
-	
-	unsigned short *buff_aux;
 	
 	//Print iteraction matrix
 	/*for(i=0;i<=A->size_x/A->size_xd;i++)
@@ -198,17 +195,13 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		
 		//printf("iter = %d to proc = %d\n", i, send_id);
 		iter_aux = A-> matrix_iter [x-1][y];
-		
 		//master sends the data needed to calc the [x][y] matrix to the process (send_id)
 		//for (j=0; j <= A->size_yd; j++)
 			MPI_Send(info[iter_aux][0], A->size_yd+1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
 		
 		iter_aux = A-> matrix_iter [x][y-1];
-		
-		//for (j=0; j <= A->size_xd; j++)
-			//MPI_Send(&info[iter_aux][1][j], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
-			MPI_Send(info[iter_aux][1], A->size_xd+1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
-		
+		for (j=0; j <= A->size_xd; j++)
+			MPI_Send(&info[iter_aux][1][j], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
 		
 		//Next process
 		send_id = send_id+1;
@@ -221,20 +214,12 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 			if ( A -> matrix_dist[iter_aux] == status->MPI_SOURCE) break;
 
 		info[iter_aux][0][0] = info_aux[0][0];
-		
 		//Master receives the rest of the message from the slave that was already sending
-		buff_aux=(unsigned short *)calloc((A -> size_yd), sizeof(unsigned short));
-		MPI_Recv(buff_aux, A->size_yd,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
-		
 		for (j=1; j <= A->size_yd; j++)
-			info[iter_aux][0][j]=buff_aux[j-1];
-		
-			//MPI_Recv(&info[iter_aux][0][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
-			//MPI_Recv(info[iter_aux][0], A->size_yd+1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
-			
-		//for (j=0; j <= A->size_xd; j++)
-			//MPI_Recv(&info[iter_aux][1][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
-			MPI_Recv(info[iter_aux][1], A->size_xd+1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+			MPI_Recv(&info[iter_aux][0][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+		for (j=0; j <= A->size_xd; j++)
+			MPI_Recv(&info[iter_aux][1][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+	
 
 	}	
 	
@@ -366,18 +351,14 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		//printf("send id= %d\n", send_id);
 		//receives the string with the matches
 		MPI_Recv(&k_aux, 1,  MPI_INT, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
-		
 		//printf("k_aux= %d\n", k_aux);
 		for (i = 0;i < k_aux; i ++)
 			MPI_Recv(&z_aux[i], 1,  MPI_CHAR, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
-			//MPI_Recv(z_aux, k_aux,  MPI_CHAR, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
-			
 		//printf("4\n");
 		//print received for debug
 		/*for (i = 0;i < k_aux; i ++)
 			printf("%d -> %c from %d\n", i , z_aux[i], send_id);
 		*/
-		
 		for (i = 0;i < k_aux; i ++)
 		{
 			z[k] = z_aux[i]; //adds the last matches to the vector
@@ -407,9 +388,9 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		printf("%c", z[i]);
 	printf("\n");
 	
-	jump_process_end(A, p);
+	jump_process(A, p);
 	
-	//printf("Exited last jump_process\n");
+	printf("Exited last jump_process\n");
 
 }
 
@@ -440,8 +421,6 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 	matrix_list *B, *B_last, *B_aux;
 	unsigned short *info1, *info2;
 	
-	unsigned short *buff_aux;
-	
 	B = initialize_matrix_list(A); //first structure B
 	B_last = B; //first structure is also the last one
 	
@@ -449,21 +428,14 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 	{
 		//receives upper line from master
 		//for (j=0; j <= A->size_yd; j++)
-		MPI_Recv(B_last->matrix[0], A->size_yd+1, MPI_UNSIGNED_SHORT, 0 , MPI_ANY_TAG, MPI_COMM_WORLD, status);
+			MPI_Recv(B_last->matrix[0], A->size_yd+1, MPI_UNSIGNED_SHORT, 0 , MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		
 		//receives x cordinate from master thrue info on TAG	
 		B_last-> id[0] = status->MPI_TAG; 
 		
 		//receives left collum from master
-		//for (j=0; j <= A->size_xd; j++)
-			//MPI_Recv(&B_last->matrix[j][0], 1, MPI_UNSIGNED_SHORT, 0 , MPI_ANY_TAG, MPI_COMM_WORLD, status);
-			
-		buff_aux=(unsigned short *)calloc((A -> size_xd +1), sizeof(unsigned short));	
-		MPI_Recv(buff_aux, A->size_xd+1, MPI_UNSIGNED_SHORT, 0 , MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		for (j=0; j <= A->size_xd; j++)
-			B_last->matrix[j][0]=buff_aux[j];
-		
-
+			MPI_Recv(&B_last->matrix[j][0], 1, MPI_UNSIGNED_SHORT, 0 , MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		
 		//receives y cordinate from master thrue info on TAG		
 		B_last-> id[1] = status->MPI_TAG;
@@ -485,27 +457,10 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		}printf("\n");*/
 		
 		//Send results to master
-		
-		MPI_Send(&B_last->matrix[A->size_xd][0], 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
-		
-		//for (j=1; j <= A->size_yd; j++)
-			//MPI_Send(&B_last->matrix[A->size_xd][j], 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
-			//MPI_Send(B_last->matrix[A->size_xd], A->size_yd+1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
-		
-		buff_aux=realloc(buff_aux,(A -> size_yd));
-		for (j=1; j <= A->size_yd; j++)
-			buff_aux[j-1]=B_last->matrix[A->size_xd][j];
-		
-		MPI_Send(buff_aux, A->size_yd, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
-			
-		//for (j=0; j <= A->size_xd; j++)
-			//MPI_Send(&B_last->matrix[j][A->size_yd], 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
-			//MPI_Send(B_last->matrix[A->size_yd], A->size_xd+1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);		
-		buff_aux=realloc(buff_aux,(A -> size_xd +1));
+		for (j=0; j <= A->size_yd; j++)
+			MPI_Send(&B_last->matrix[A->size_xd][j], 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
 		for (j=0; j <= A->size_xd; j++)
-			buff_aux[j]=B_last->matrix[j][A->size_yd];	
-		MPI_Send(buff_aux, A->size_xd+1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
-
+			MPI_Send(&B_last->matrix[j][A->size_yd], 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
 		
 		//creates new structure, point the last stucture to the new one
 		B_aux = initialize_matrix_list(A);
@@ -627,48 +582,17 @@ void jump_process(matrix_info *A, int p)
 	unsigned short *l;
 	l=(unsigned short *)calloc((A -> size_yd +1), sizeof(unsigned short));
 	
-	//unsigned short l[A->size_yd+1];
-	
-	unsigned short *m;
-	m=(unsigned short *)calloc((A -> size_xd +1), sizeof(unsigned short));	
-	
 	for (send_id=1; send_id < p; send_id ++)
 	{
 		//for (j=0; j <= A->size_yd; j++)
 			//MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
-			
 		MPI_Send(l, A->size_yd+1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);	
-		//printf("1st jump send, send_id:%d\n",send_id);
+		printf("1st, send_id:%d\n",send_id);
 			
-		//for (j=0; j <= A->size_xd; j++)
-			//MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
+		for (j=0; j <= A->size_xd; j++)
+			MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
 			
-		MPI_Send(m, A->size_xd+1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
-		//printf("2nd jump send, send_id:%d\n",send_id);	
-		
-		
-	}
-}
-
-void jump_process_end(matrix_info *A, int p)
-{
-	int j, send_id;
-	
-
-	
-	for (send_id=1; send_id < p; send_id ++)
-	{
-		//for (j=0; j <= A->size_yd; j++)
-			//MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
-			
-		MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);	
-		//printf("1st jump send, send_id:%d\n",send_id);
-			
-		//for (j=0; j <= A->size_xd; j++)
-			//MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
-			
-		MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
-		//printf("2nd jump send, send_id:%d\n",send_id);	
+		printf("2nd, send_id:%d\n",send_id);	
 		
 		
 	}
