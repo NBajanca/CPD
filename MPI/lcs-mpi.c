@@ -83,7 +83,8 @@ int main (int argc, char *argv[])
 	{
 		printf("sixe_x: %d, size_y: %d\n", A->size_x, A->size_y );
 		printf("sixe_xd: %d, size_yd: %d\n", A->size_xd, A->size_yd );
-		printf("x: %s\ny: %s\n", A->x,A->y );
+		//printf("x: %s\ny: %s\n", A->x,A->y );
+		printf("iter:%d\n",A->iter);
 	}
 	
 	//allocs and initializes the A-> matrix_dist
@@ -198,17 +199,20 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		
 		//printf("iter = %d to proc = %d\n", i, send_id);
 		iter_aux = A-> matrix_iter [x-1][y];
-		
+		//printf("iter_aux:%d\n",iter_aux);
 		//master sends the data needed to calc the [x][y] matrix to the process (send_id)
 		//for (j=0; j <= A->size_yd; j++)
-			MPI_Send(info[iter_aux][0], A->size_yd+1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
+		
+		MPI_Send(info[iter_aux][0], A->size_yd+1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
+		//printf("1st master send, i:%d\n",i);
 		
 		iter_aux = A-> matrix_iter [x][y-1];
-		
+		//printf("iter_aux:%d\n",iter_aux);
 		//for (j=0; j <= A->size_xd; j++)
 			//MPI_Send(&info[iter_aux][1][j], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
-			MPI_Send(info[iter_aux][1], A->size_xd+1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
-		
+			
+		MPI_Send(info[iter_aux][1], A->size_xd+1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
+		//printf("2nd master send, i:%d\n\n",i);
 		
 		//Next process
 		send_id = send_id+1;
@@ -234,7 +238,7 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 			
 		//for (j=0; j <= A->size_xd; j++)
 			//MPI_Recv(&info[iter_aux][1][j], 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
-			MPI_Recv(info[iter_aux][1], A->size_xd+1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+		MPI_Recv(info[iter_aux][1], A->size_xd+1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
 
 	}	
 	
@@ -354,6 +358,11 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		//printf("2\n");
 		MPI_Send(&pos_final[1][1], 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
 		
+		/*buff_aux=realloc(buff_aux,2);
+		buff_aux[0]=pos_final[1][0];
+		buff_aux[1]=pos_final[1][1];
+		MPI_Send(buff_aux, 2, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);*/
+		
 		//printf("3\n");
 		
 		//receives the position on the "c" matrix and the cordinates for the matrix_dist
@@ -368,9 +377,10 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		MPI_Recv(&k_aux, 1,  MPI_INT, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		
 		//printf("k_aux= %d\n", k_aux);
-		for (i = 0;i < k_aux; i ++)
-			MPI_Recv(&z_aux[i], 1,  MPI_CHAR, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
-			//MPI_Recv(z_aux, k_aux,  MPI_CHAR, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+		//for (i = 0;i < k_aux; i ++)
+			//MPI_Recv(&z_aux[i], 1,  MPI_CHAR, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+
+		MPI_Recv(z_aux, k_aux,  MPI_CHAR, send_id, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 			
 		//printf("4\n");
 		//print received for debug
@@ -593,8 +603,12 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		
 		MPI_Send(&k, 1,  MPI_INT, 0, id, MPI_COMM_WORLD);
 		//printf("k slave= %d\n", k);
-		for (i = 0;i < k; i ++)
-			MPI_Send(&z[i], 1,  MPI_CHAR, 0, id, MPI_COMM_WORLD);
+		
+		//for (i = 0;i < k; i ++)
+			//MPI_Send(&z[i], 1,  MPI_CHAR, 0, id, MPI_COMM_WORLD);
+			
+		MPI_Send(z, k,  MPI_CHAR, 0, id, MPI_COMM_WORLD);
+			
 		/*printf("[%d][%d] -> [%d][%d]\n\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);	*/
 		//printf("slave [%d] 6\n", id);
 	}
