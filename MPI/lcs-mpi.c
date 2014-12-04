@@ -107,8 +107,6 @@ int main (int argc, char *argv[])
 		printf ("Average time per Iteration/Process = %12.6f sec\n",	secs/(A->iter/p));
   	}*/
 
-	printf("Returned to main!\n");
-
    	MPI_Finalize();
    	return 0;
 }
@@ -146,14 +144,14 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	unsigned short ***info;
 	
 	//Print iteraction matrix
-	/*for(i=0;i<=A->size_x/A->size_xd;i++)
+	for(i=0;i<=A->size_x/A->size_xd;i++)
 	{
 		for(j=0; j<=A->size_y/A->size_yd;j++)
 		{
 			printf("[%d]", A-> matrix_iter [i][j]);
 		}
 		printf ("\n");
-	}*/
+	}
 	
 	info = initialize_info(A, B);
 	
@@ -196,8 +194,8 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 		//printf("iter = %d to proc = %d\n", i, send_id);
 		iter_aux = A-> matrix_iter [x-1][y];
 		//master sends the data needed to calc the [x][y] matrix to the process (send_id)
-		//for (j=0; j <= A->size_yd; j++)
-			MPI_Send(info[iter_aux][0], A->size_yd+1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
+		for (j=0; j <= A->size_yd; j++)
+			MPI_Send(&info[iter_aux][0][j], 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
 		
 		iter_aux = A-> matrix_iter [x][y-1];
 		for (j=0; j <= A->size_xd; j++)
@@ -390,7 +388,6 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	
 	jump_process(A, p);
 	
-	printf("Exited last jump_process\n");
 
 }
 
@@ -427,8 +424,8 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 	while(1) //Runs until master sends info to stop
 	{
 		//receives upper line from master
-		//for (j=0; j <= A->size_yd; j++)
-			MPI_Recv(B_last->matrix[0], A->size_yd+1, MPI_UNSIGNED_SHORT, 0 , MPI_ANY_TAG, MPI_COMM_WORLD, status);
+		for (j=0; j <= A->size_yd; j++)
+			MPI_Recv(&B_last->matrix[0][j], 1, MPI_UNSIGNED_SHORT, 0 , MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		
 		//receives x cordinate from master thrue info on TAG	
 		B_last-> id[0] = status->MPI_TAG; 
@@ -578,23 +575,12 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 void jump_process(matrix_info *A, int p)
 {
 	int j, send_id;
-	
-	unsigned short *l;
-	l=(unsigned short *)calloc((A -> size_yd +1), sizeof(unsigned short));
-	
 	for (send_id=1; send_id < p; send_id ++)
 	{
-		//for (j=0; j <= A->size_yd; j++)
-			//MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
-		MPI_Send(l, A->size_yd+1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);	
-		printf("1st, send_id:%d\n",send_id);
-			
+		for (j=0; j <= A->size_yd; j++)
+			MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
 		for (j=0; j <= A->size_xd; j++)
 			MPI_Send(&j, 1, MPI_UNSIGNED_SHORT, send_id, JUMPTAG, MPI_COMM_WORLD);
-			
-		printf("2nd, send_id:%d\n",send_id);	
-		
-		
 	}
 }
 
@@ -702,7 +688,7 @@ void read_file(char **argv, matrix_info *A)
 {
 	FILE * f;
 	char *buffer;
-	int i, j;
+	int i, j, a, b;
 	int size_xx, size_yy;
 	
 	f = fopen(argv[1], "r");
@@ -721,7 +707,10 @@ void read_file(char **argv, matrix_info *A)
 	
 	//Reading input file
 	fgets(buffer, SIZE_BUFFER_0, f);
-	sscanf(buffer,"%d %d", &(*A).size_x, &(*A).size_y);
+	sscanf(buffer,"%d %d", &a, &b);
+	
+	(*A).size_x = max(a,b);
+	(*A).size_y = min(a,b);
 	
 	size_xx = ((*A).size_x+ SIZE_BUFFER)*sizeof(char);
 	size_yy = ((*A).size_y+ SIZE_BUFFER)*sizeof(char);
@@ -736,27 +725,35 @@ void read_file(char **argv, matrix_info *A)
 		exit(ERROR);
 	}
 						
-	(*A).x = malloc(((*A).size_x+1)*sizeof(char));  
+	(*A).x = malloc((max((*A).size_x, (*A).size_y)+1)*sizeof(char));  
 	if ((*A).x == NULL)
 	{
 		fprintf(stdout, "Error in x malloc\n");
 		exit(ERROR);
 	}
-	(*A).y = malloc(((*A).size_y+1)*sizeof(char));  
+	(*A).y = malloc((min((*A).size_x, (*A).size_y)+1)*sizeof(char));
 	if ((*A).y == NULL)
 	{
 		fprintf(stdout, "Error in y malloc\n");
 		exit(ERROR);
 	}
 	
-	
+	if(a>=b)
+	{
 		fgets(buffer, size_xx, f);
 		sscanf(buffer, "%s\n", (*A).x);
 		fgets(buffer, size_yy,  f);
 		sscanf(buffer, "%s\n", (*A).y);
-	
+	}
+	else
+	{
+		fgets(buffer, size_xx, f);
+		sscanf(buffer, "%s\n", (*A).y);
+		fgets(buffer, size_yy,  f);
+		sscanf(buffer, "%s\n", (*A).x);
+	}
+
 	//printf("x= %s\ny= %s\n", (*A).x, (*A).y);
-	
 	
 }
 
@@ -827,19 +824,17 @@ void divide_by_prime(matrix_info *A)
  */
 void matrix_iter(matrix_info *A)
 {
-int size_x, size_y;
+	int size_x, size_y;
 	size_x = A->size_x/A->size_xd;
 	size_y = A->size_y/A->size_yd;
 	int i, j, h, iter = 1;
-	
-	
 	
 	/*printf("size_x = %d, size_y= %d\n", size_x, size_y);
 	printf("A->size_x = %d, A->size_y= %d\n", A->size_x,A->size_y);
 	printf("A->size_xd = %d, A->size_yd= %d\n", A->size_xd,A->size_yd);
 	printf("1\n");*/
 	if(size_x==size_y){
-		//printf("2\n");
+		//*printf("2\n");
 		for(h=1; h<=size_y; h++)		
 			for(i=1, j=h; j>0; i++, j--)
 			{
@@ -856,8 +851,8 @@ int size_x, size_y;
 	else
 	{//printf("5\n");
 		for(h=1; h<=size_y; h++)
-			for(i=1, j=h; j>0 && i<=size_x; i++, j--)
-			{//printf("h = %d, i = %d,  = %d\n",h, i, j);
+			for(i=1, j=h; j>0; i++, j--)
+			{//printf("i = %d, h = %d\n",i, h);
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
 			}//printf("6\n");
@@ -869,7 +864,6 @@ int size_x, size_y;
 			}//printf("7\n");
 	}
 	//printf("8\n");
-	
 }
 
 
