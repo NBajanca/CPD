@@ -877,29 +877,29 @@ int size_x, size_y;
 	size_y = A->size_y/A->size_yd;
 	int i, j, h, iter = 1;
 
-	if(size_x==size_y){
-		for(h=1; h<=size_y; h++)		
+	if(size_x==size_y){		//for square matrix
+		for(h=1; h<=size_y; h++)	//runs diagonal for every column
 			for(i=1, j=h; j>0; i++, j--)
 			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
 			}
-		for(h=size_y+1; h<size_y+size_x; h++)
+		for(h=size_y+1; h<size_y+size_x; h++) //runs diagonal for last columns
 			for(i=h-size_y+1, j=size_x; i<=size_x; j--, i++)
 			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
 			}
 	}
-	else
+	else				//for not square matrix
 	{
-		for(h=1; h<=size_y; h++)
+		for(h=1; h<=size_y; h++)	//runs diagonal for every column
 			for(i=1, j=h; j>0 && i<=size_x; i++, j--)
 			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
 			}
-		for(h=size_y+1; h<=size_x+size_y; h++)
+		for(h=size_y+1; h<=size_x+size_y; h++)	//runs diagonal for last columns
 			for(i=h-size_y+1, j=size_y; j>0 && i<=size_x; i++, j--)
 			{
 				A-> matrix_iter [i][j] = iter;
