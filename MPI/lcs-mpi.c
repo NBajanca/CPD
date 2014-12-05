@@ -40,9 +40,9 @@
 	void jump_process(matrix_info *A, int p);
 	void jump_process2(matrix_info *A, int p);
 
-	matrix_info* initialize_matrix_info(char **argv);
+	matrix_info* initialize_matrix_info(char **argv, int p);
 	void read_file(char **argv, matrix_info *A);
-	void divide_by_prime(matrix_info *A);
+	void divide(matrix_info *A, int p);
 	void matrix_iter(matrix_info *A);
 	void find_pos(matrix_info *A, int iter, int *x, int *y);
 
@@ -77,14 +77,14 @@ int main (int argc, char *argv[])
     MPI_Comm_size (MPI_COMM_WORLD, &p);
 
     
-	A = initialize_matrix_info(argv);
+	A = initialize_matrix_info(argv, p);
 	
 	//Only for the master, prints matrix info -> debug only
 	/*if (!id)
 	{
 		printf("sixe_x: %d, size_y: %d\n", A->size_x, A->size_y );
 		printf("sixe_xd: %d, size_yd: %d\n", A->size_xd, A->size_yd );
-		printf("x: %s\ny: %s\n", A->x,A->y );
+		//printf("x: %s\ny: %s\n", A->x,A->y );
 	}*/
 	
 	//allocs and initializes the A-> matrix_dist
@@ -131,7 +131,6 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 {
 	MPI_Request request;
 	int i, j, 
-		iter_line_aux, iter_max_start = 0, iter_limit = 0, 
 		send_id = 1, 
 		x=1, y=1,
 		iter_aux= 1;
@@ -207,120 +206,25 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	
 	for (j=0; j <= A->size_xd; j++)
 		info[1][1][j];
-
 	
-	for(i = 2; i < A->iter; i++)
-	{	
-		if ((i < A->size_y/A->size_yd) && (A->iter_line[i+1] < p))
+	int h, iter, u, iter_counter;
+	
+	for(h = 2; h < A->size_y/A->size_yd; h++)
+	{
+		i = 1; 
+		j = h;
+		send_id = 1;
+		
+		for(iter = A-> matrix_iter [i][j], iter_counter = 0; iter < A-> matrix_iter [i][j+1]  && iter < A-> matrix_iter [i][j] + p -1; iter ++ , iter_counter ++)
 		{
-			for (iter_line_aux = i; i < A->iter_line[iter_line_aux+1]; i++)
-			{
+			//printf("iter = %d, id = %d\n",iter, send_id);
+			info[iter][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
+			info[iter][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
 				
-				info[i][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
-				info[i][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
-					
-				find_pos(A, i, &x, &y); //finds the position for the iteration that is about to send
-				A -> matrix_dist[i] = send_id;
-				
-				//printf ("i = %d; send_id = %d; x = %d, y = %d\n", i, send_id, x , y );
-				//printf("iter = %d to proc = %d\n", i, send_id);
-				
-				iter_aux = A-> matrix_iter [x-1][y];
-				//printf ("iter_aux = %d\n", iter_aux);
-				//master sends the data needed to calc the [x][y] matrix to the process (send_id)
-				MPI_Send(info[iter_aux][0], A->size_yd + 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
-				
-				iter_aux = A-> matrix_iter [x][y-1];
-				//printf ("iter_aux = %d\n", iter_aux);
-				MPI_Send(info[iter_aux][1], A->size_xd + 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
-				
-				//printf("Master Finished send\n");
-				//Next process
-				send_id = send_id+1;
-				if (send_id == p) send_id = 1;
-			}
-			for (i = iter_line_aux; i < A->iter_line[iter_line_aux+1]; i++)
-			{
-				//Master receives from the slave the last line of the matrix calculated
-				MPI_Recv(info_aux[0], A->size_yd +1 ,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
-				
-				//Find whitch matrix was received from the slave info	
-				for (iter_aux =i; iter_aux>0; iter_aux--)
-					if ( A -> matrix_dist[iter_aux] == status->MPI_SOURCE) break;
-				
-				//copy from buffer to string with the info
-				for (j=0; j <= A->size_yd; j++)
-					info[iter_aux][0][j] = info_aux[0][j];
-				
-				//Master receives from the slave the last collum of the matrix calculated	
-				MPI_Recv(info_aux[1],A->size_xd + 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
-				
-				//copy from buffer to string with the info	
-				for (j=0; j <= A->size_xd; j++)
-					info[iter_aux][1][j] = info_aux[1][j];
-			}
-			iter_max_start = i;
-		}
-		else if (i > A->iter - iter_max_start)
-		{
-			find_pos(A, i, &x, &y);
-			iter_limit = A -> matrix_iter[x+1][A->size_yd];
-			for (iter_line_aux = i; i < iter_limit; i++)
-			{
-				
-				info[i][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
-				info[i][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
-					
-				find_pos(A, i, &x, &y); //finds the position for the iteration that is about to send
-				A -> matrix_dist[i] = send_id;
-				
-				//printf ("i = %d; send_id = %d; x = %d, y = %d\n", i, send_id, x , y );
-				//printf("iter = %d to proc = %d\n", i, send_id);
-				
-				iter_aux = A-> matrix_iter [x-1][y];
-				//printf ("iter_aux = %d\n", iter_aux);
-				//master sends the data needed to calc the [x][y] matrix to the process (send_id)
-				MPI_Send(info[iter_aux][0], A->size_yd + 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
-				
-				iter_aux = A-> matrix_iter [x][y-1];
-				//printf ("iter_aux = %d\n", iter_aux);
-				MPI_Send(info[iter_aux][1], A->size_xd + 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
-				
-				//printf("Master Finished send\n");
-				//Next process
-				send_id = send_id+1;
-				if (send_id == p) send_id = 1;
-			}
-			for (i = iter_line_aux; i < iter_limit; i++)
-			{
-				//Master receives from the slave the last line of the matrix calculated
-				MPI_Recv(info_aux[0], A->size_yd +1 ,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
-				
-				//Find whitch matrix was received from the slave info	
-				for (iter_aux =i; iter_aux>0; iter_aux--)
-					if ( A -> matrix_dist[iter_aux] == status->MPI_SOURCE) break;
-				
-				//copy from buffer to string with the info
-				for (j=0; j <= A->size_yd; j++)
-					info[iter_aux][0][j] = info_aux[0][j];
-				
-				//Master receives from the slave the last collum of the matrix calculated	
-				MPI_Recv(info_aux[1],A->size_xd + 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
-				
-				//copy from buffer to string with the info	
-				for (j=0; j <= A->size_xd; j++)
-					info[iter_aux][1][j] = info_aux[1][j];
-			}
-		}
-		else
-		{
-			//printf("Entering free zone for i = %d\n", i);
-			info[i][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
-			info[i][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
-				
-			find_pos(A, i, &x, &y); //finds the position for the iteration that is about to send
-			A -> matrix_dist[i] = send_id;
+			find_pos(A, iter, &x, &y); //finds the position for the iteration that is about to send
+			A -> matrix_dist[iter] = send_id;
 			
+			//printf("Start Sending\n");
 			//printf("iter = %d to proc = %d\n", i, send_id);
 			iter_aux = A-> matrix_iter [x-1][y];
 			//master sends the data needed to calc the [x][y] matrix to the process (send_id)
@@ -332,26 +236,157 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 			//Next process
 			send_id = send_id+1;
 			if (send_id == p) send_id = 1;
-
+		}
+		for(;iter < A-> matrix_iter [i][j+1]; iter ++)
+		{
+			//printf("Start Receiving\n");
 			//Master receives from the slave the last line of the matrix calculated
 			MPI_Recv(info_aux[0], A->size_yd +1 ,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 			
 			//Find whitch matrix was received from the slave info	
-			for (iter_aux =i; iter_aux>0; iter_aux--)
+			for (iter_aux =iter; iter_aux>0; iter_aux--)
 				if ( A -> matrix_dist[iter_aux] == status->MPI_SOURCE) break;
 			
 			//copy from buffer to string with the info
-			for (j=0; j <= A->size_yd; j++)
-				info[iter_aux][0][j] = info_aux[0][j];
+			for (u=0; u <= A->size_yd; u++)
+				info[iter_aux][0][u] = info_aux[0][u];
 			
 			//Master receives from the slave the last collum of the matrix calculated	
 			MPI_Recv(info_aux[1],A->size_xd + 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
 			
 			//copy from buffer to string with the info	
-			for (j=0; j <= A->size_xd; j++)
-				info[iter_aux][1][j] = info_aux[1][j];
+			for (u=0; u <= A->size_xd; u++)
+				info[iter_aux][1][u] = info_aux[1][u];
+				
+			//printf("iter = %d, id = %d\n",iter, status->MPI_SOURCE);
+			info[iter][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
+			info[iter][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
+				
+			find_pos(A, iter, &x, &y); //finds the position for the iteration that is about to send
+			A -> matrix_dist[iter] = status->MPI_SOURCE;
+			
+			//printf("Start Sending\n");
+			//printf("iter = %d to proc = %d\n", i, send_id);
+			iter_aux = A-> matrix_iter [x-1][y];
+			//master sends the data needed to calc the [x][y] matrix to the process (send_id)
+			MPI_Send(info[iter_aux][0], A->size_yd + 1, MPI_UNSIGNED_SHORT, status->MPI_SOURCE, x, MPI_COMM_WORLD);
+			
+			iter_aux = A-> matrix_iter [x][y-1];
+			MPI_Send(info[iter_aux][1], A->size_xd + 1, MPI_UNSIGNED_SHORT, status->MPI_SOURCE, y, MPI_COMM_WORLD);
 		}
-	}	
+		for(;iter_counter > 0;iter_counter --)
+		{
+			//printf("Start Receiving\n");
+			//Master receives from the slave the last line of the matrix calculated
+			MPI_Recv(info_aux[0], A->size_yd +1 ,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+			
+			//Find whitch matrix was received from the slave info	
+			for (iter_aux =iter; iter_aux>0; iter_aux--)
+				if ( A -> matrix_dist[iter_aux] == status->MPI_SOURCE) break;
+			
+			//copy from buffer to string with the info
+			for (u=0; u <= A->size_yd; u++)
+				info[iter_aux][0][u] = info_aux[0][u];
+			
+			//Master receives from the slave the last collum of the matrix calculated	
+			MPI_Recv(info_aux[1],A->size_xd + 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+			
+			//copy from buffer to string with the info	
+			for (u=0; u <= A->size_xd; u++)
+				info[iter_aux][1][u] = info_aux[1][u];
+		}
+		find_pos(A, iter, &i, &j);
+	}
+	for(h = 1; h < A->size_x/A->size_xd ; h++)
+	{
+		i = h; 
+		j = A->size_y/A->size_yd;
+		send_id = 1;
+		
+		for(iter = A-> matrix_iter [i][j], iter_counter = 0; iter < A-> matrix_iter [i+1][j]  && iter < A-> matrix_iter [i][j] + p -1; iter ++ , iter_counter ++)
+		{
+			//printf("iter = %d, id = %d\n",iter, send_id);
+			info[iter][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
+			info[iter][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
+				
+			find_pos(A, iter, &x, &y); //finds the position for the iteration that is about to send
+			A -> matrix_dist[iter] = send_id;
+			
+			//printf("Start Sending\n");
+			//printf("iter = %d to proc = %d\n", i, send_id);
+			iter_aux = A-> matrix_iter [x-1][y];
+			//master sends the data needed to calc the [x][y] matrix to the process (send_id)
+			MPI_Send(info[iter_aux][0], A->size_yd + 1, MPI_UNSIGNED_SHORT, send_id, x, MPI_COMM_WORLD);
+			
+			iter_aux = A-> matrix_iter [x][y-1];
+			MPI_Send(info[iter_aux][1], A->size_xd + 1, MPI_UNSIGNED_SHORT, send_id, y, MPI_COMM_WORLD);
+			
+			//Next process
+			send_id = send_id+1;
+			if (send_id == p) send_id = 1;
+		}
+		for(;iter < A-> matrix_iter [i+1][j]; iter ++)
+		{
+			//printf("Start Receiving\n");
+			//Master receives from the slave the last line of the matrix calculated
+			MPI_Recv(info_aux[0], A->size_yd +1 ,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+			
+			//Find whitch matrix was received from the slave info	
+			for (iter_aux =iter; iter_aux>0; iter_aux--)
+				if ( A -> matrix_dist[iter_aux] == status->MPI_SOURCE) break;
+			
+			//copy from buffer to string with the info
+			for (u=0; u <= A->size_yd; u++)
+				info[iter_aux][0][u] = info_aux[0][u];
+			
+			//Master receives from the slave the last collum of the matrix calculated	
+			MPI_Recv(info_aux[1],A->size_xd + 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+			
+			//copy from buffer to string with the info	
+			for (u=0; u <= A->size_xd; u++)
+				info[iter_aux][1][u] = info_aux[1][u];
+				
+			//printf("iter = %d, id = %d\n",iter, status->MPI_SOURCE);
+			info[iter][0] = generate_matrix_info(B, A->size_yd,A->size_xd, 1);
+			info[iter][1] = generate_matrix_info(B, A->size_xd,A->size_yd, 2);
+				
+			find_pos(A, iter, &x, &y); //finds the position for the iteration that is about to send
+			A -> matrix_dist[iter] = status->MPI_SOURCE;
+			
+			//printf("Start Sending\n");
+			//printf("iter = %d to proc = %d\n", i, send_id);
+			iter_aux = A-> matrix_iter [x-1][y];
+			//master sends the data needed to calc the [x][y] matrix to the process (send_id)
+			MPI_Send(info[iter_aux][0], A->size_yd + 1, MPI_UNSIGNED_SHORT, status->MPI_SOURCE, x, MPI_COMM_WORLD);
+			
+			iter_aux = A-> matrix_iter [x][y-1];
+			MPI_Send(info[iter_aux][1], A->size_xd + 1, MPI_UNSIGNED_SHORT, status->MPI_SOURCE, y, MPI_COMM_WORLD);
+		}
+		for(;iter_counter > 0;iter_counter --)
+		{
+			//printf("Start Receiving\n");
+			//Master receives from the slave the last line of the matrix calculated
+			MPI_Recv(info_aux[0], A->size_yd +1 ,  MPI_UNSIGNED_SHORT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, status);
+			
+			//Find whitch matrix was received from the slave info	
+			for (iter_aux =iter; iter_aux>0; iter_aux--)
+				if ( A -> matrix_dist[iter_aux] == status->MPI_SOURCE) break;
+			
+			//copy from buffer to string with the info
+			for (u=0; u <= A->size_yd; u++)
+				info[iter_aux][0][u] = info_aux[0][u];
+			
+			//Master receives from the slave the last collum of the matrix calculated	
+			MPI_Recv(info_aux[1],A->size_xd + 1,  MPI_UNSIGNED_SHORT, status->MPI_SOURCE, status->MPI_TAG, MPI_COMM_WORLD, status);
+			
+			//copy from buffer to string with the info	
+			for (u=0; u <= A->size_xd; u++)
+				info[iter_aux][1][u] = info_aux[1][u];
+		}
+		find_pos(A, iter, &i, &j);
+	
+	}
+	i = A->iter -1;
 	
 	jump_process(A, p);
 	//Calc of last iteration
@@ -460,7 +495,7 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	iter_aux = A-> matrix_iter [x][y];
 	send_id = A->matrix_dist[iter_aux];
 
-	//printf("iter_aux:%d\nsend_id:%d\n",iter_aux,send_id);	
+	printf("iter_aux:%d\nsend_id:%d\n",iter_aux,send_id);	
 	
 	while (iter_aux > 1){
 		//sends the position on the "c" matrix and the cordinates for the matrix_dist
@@ -584,6 +619,7 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 				printf("[%d]",B_last->matrix[i][j]);
 			printf("\n");
 		}printf("\n");*/
+		
 		
 		//Send results to master (last line)
 		MPI_Send(B_last->matrix[A->size_xd], A->size_yd + 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
@@ -753,7 +789,7 @@ void jump_process2(matrix_info *A, int p)
  * Notes:		
  * 
  */
-matrix_info* initialize_matrix_info(char **argv)
+matrix_info* initialize_matrix_info(char **argv, int p)
 {
 	int i;
 	matrix_info *A;
@@ -778,7 +814,7 @@ matrix_info* initialize_matrix_info(char **argv)
 	read_file(argv, A);
 	
 	//finds the best way to divide the matrix in small ones and changes A based on it
-	divide_by_prime(A);
+	divide(A, p);
 	
 	//number of iterations
 	A -> iter = ((A->size_x)/(A->size_xd))*((A->size_y)/(A->size_yd));
@@ -918,36 +954,55 @@ void read_file(char **argv, matrix_info *A)
  * 			Doesn't work if the proposed run number is prime
  * 
  */
-void divide_by_prime(matrix_info *A)
+void divide(matrix_info *A, int p)
 {
+
+	int i, num_slaves, found_flag=0;
 	
-	A->size_xd=A->size_x/(10);
-	A->size_yd=A->size_y/(10);
-	
-	/*int i, line_div,
-		prime_num[11]={2,3,5,7,10,11,13,17,19,23,29};
-	
-	//lines
-	for (i=0; i<11; i++)
-	{
-		if (((*A).size_x % prime_num[i]) == 0) //checks if the rest is zero
-		{
-			(*A).size_xd = prime_num[i];
-			line_div=prime_num[i];
+	num_slaves = p-1;
+		
+	// size_xd calculation
+	for (i=1; i<=10; i++){
+		if(A->size_x%(i*num_slaves)==0){
+			A->size_xd = A->size_x/(i*num_slaves);
+			found_flag=1;
 			break;
 		}
 	}
+	if (found_flag==0){			//if divisor not found
+		for (i=num_slaves; i<100; i++){
+			if(A->size_x%i==0){
+				A->size_xd = A->size_x/i;
+				found_flag=1;
+				break;
+			}
+		}
+	}
+	if(found_flag==0) A->size_xd = A->size_x;
+	found_flag=0;
 	
-	//collums
-	for (i=0; i<11; i++)
-	{
-		if (((*A).size_y % prime_num[i]) == 0 && prime_num[i]>=line_div)
-		{
-			(*A).size_yd = prime_num[i];
+	// size_yd calculation
+	for (i=1; i<=10; i++){
+		if(A->size_y%(i*num_slaves)==0){
+			A->size_yd = A->size_y/(i*num_slaves);
+			found_flag=1;
 			break;
 		}
-	}*/
-
+	}
+	if (found_flag==0){			//if divisor not found
+		for (i=num_slaves; i<100; i++){
+			if(A->size_y%i==0){
+				A->size_yd = A->size_y/i;
+				found_flag=1;
+				break;
+			}
+		}
+	}
+	if(found_flag==0) A->size_yd = A->size_y;
+	/*printf("num_slaves=%d\n", num_slaves);
+	printf("size_x=%d\tsize_y=%d\n", A->size_x, A->size_y);
+	printf("size_xd=%d\tsize_yd=%d\n", A->size_xd, A->size_yd);
+	*/
 }
 
 /* matrix_iter(A)
