@@ -65,7 +65,6 @@ int main (int argc, char *argv[])
 
     MPI_Status status;
     int id, p;
-    double secs;
 	matrix_info *A;
 	
 	//if file name is not added to the program call
@@ -83,21 +82,13 @@ int main (int argc, char *argv[])
 
     
 	A = initialize_matrix_info(argv, p);
-	
-	//allocs and initializes the A-> matrix_dist
-	A-> matrix_dist = (unsigned short *)calloc((A -> iter +1), sizeof(unsigned short));
 
-	//wait for every process to be ready
-    MPI_Barrier (MPI_COMM_WORLD);
-    secs = - MPI_Wtime();
-	
 	//separates master from slaves (master is process 0)
 	if (!id) master_io(p, &status, A);
     else slave_io(id, p, &status, A);
 	
 	//waits for all to be finished
     MPI_Barrier (MPI_COMM_WORLD);
-    secs += MPI_Wtime();
 
    	MPI_Finalize();
    	return 0;
@@ -307,6 +298,9 @@ void master_io(int p, MPI_Status *status, matrix_info *A)
 	
 	
 	end_process(A, p);
+	
+	free(pos_final[0]);
+	free(pos_final[1]);
 }
 
 /* slave_io(id, p, status, A)
@@ -363,20 +357,9 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		//receives info from master to stop this operation and jump to the next
 		if (status->MPI_TAG == JUMPTAG) 
 			break;
-		
-		//printf("Slave %d Finished receiving\n", id);
+			
 		//calc the matrix indicated by the master
 		matrix_calc(A, B_last);
-		
-		//matrix calculated print for debug porpuse
-		/*printf("matrix [%d][%d] from process: %d\n", B_last-> id[0], B_last-> id[1],id);
-		for (i=1; i <=A->size_xd; i++)
-		{
-			for (j=1; j<= A->size_yd; j++)
-				printf("[%d]",B_last->matrix[i][j]);
-			printf("\n");
-		}printf("\n");*/
-		
 		
 		//Send results to master (last line)
 		MPI_Send(B_last->matrix[A->size_xd], A->size_yd + 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
@@ -388,7 +371,6 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		//Sends buffer to the master (last collum)
 		MPI_Send(info_aux[1], A->size_xd + 1, MPI_UNSIGNED_SHORT, 0, id, MPI_COMM_WORLD);
 		
-		//printf("Slave %d Finished sending\n", id);
 		//creates new structure, point the last stucture to the new one
 		B_aux = initialize_matrix_list(A);
 		B_last->next = B_aux;
@@ -405,9 +387,10 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 	
 	//Alocs z matrix where each string is going to be stored
 	if(A->size_xd<A->size_yd)
-		z = malloc((A->size_xd+1)*sizeof(char));
+		z = malloc((A->size_xd)*sizeof(char));
 	else
-		z = malloc((A->size_yd+1)*sizeof(char));
+		z = malloc((A->size_yd)*sizeof(char));
+	
 	if (z == NULL)
 	{
 		fprintf(stdout, "Error in z malloc\n");
@@ -417,13 +400,14 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 	while(1) //Runs until master sends info to stop
 	{
 		k=0; //no match
-		//printf("slave [%d] 1\n", id);
+
+		// receives info from master regarding the matrix to run
 		MPI_Recv(&pos_final[1][0], 1, MPI_UNSIGNED_SHORT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		x = status->MPI_TAG;
-		//printf("slave [%d] 2\n", id);
+
 		MPI_Recv(&pos_final[1][1], 1, MPI_UNSIGNED_SHORT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, status);
 		y = status->MPI_TAG;	
-		//printf("slave [%d] 3\n", id);
+
 		//receives info from master to stop this operation and jump to the next
 		if (status->MPI_TAG == DIETAG) 
 			break;
@@ -435,9 +419,9 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 		//from the position in the "c" matrix finds the real position to start in matrix
 		pos_final[0][0] = pos_final[1][0] - pos_final[0][0] + 1;
 		pos_final[0][1] = pos_final[1][1] - pos_final[0][1] + 1;
-		/*printf("[%d][%d] -> [%d][%d] in %d\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1], id);*/
+		
+		//finds the matrix pretended
 		B_aux = B;
-		//printf("slave [%d] 4\n", id);
 		while(B_aux -> next != NULL)
 		{
 			if ((B_aux -> id[0] == x) && (B_aux -> id[1] == y)) break;
@@ -451,20 +435,42 @@ void slave_io(int id, int p, MPI_Status *status, matrix_info *A)
 			x = x-1;
 		if (pos_final[0][1] == 0)
 			y = y-1;
-		//printf("slave [%d] 5\n", id);
+				
 		// sends the positions and the matrix
 		MPI_Send(&pos_final[1][0], 1,  MPI_UNSIGNED_SHORT,0, x, MPI_COMM_WORLD);
 		MPI_Send(&pos_final[1][1], 1,  MPI_UNSIGNED_SHORT, 0, y, MPI_COMM_WORLD);
 		
+		//Sends the number of matches
 		MPI_Send(&k, 1,  MPI_INT, 0, id, MPI_COMM_WORLD);
-		//printf("k slave= %d\n", k);
+		
+		//Sends the characters that mached
 		MPI_Send(z,k + 1,  MPI_CHAR, 0, id, MPI_COMM_WORLD);
-		/*printf("[%d][%d] -> [%d][%d]\n\n", pos_final[1][0], pos_final[1][1], pos_final[0][0], pos_final[0][1]);	*/
-		//printf("slave [%d] 6\n", id);
 	}
 
 }
 
+/* mpi_send_data ( info, A, B, iter, send_id)
+ * 
+ * Input:
+ *			info -> matrix (three dimensions) that has all the last lines and collums
+ * 			A -> structure matrix_info
+ *  		B -> structure matrix_list
+ * 			iter -> iteration number
+ * 			send_id -> process id
+ * 
+ * Output:
+ * 			None
+ * 
+ * Changes:
+ * 			Nothing
+ * 
+ * Description:
+ * 			This function sends the first collum and first line of some matrix to some process
+ * 
+ * Notes:
+ * 			This function is only run by the master (process id==0)			
+ * 
+ */
 void mpi_send_data ( unsigned short ***info, matrix_info *A, matrix_list *B, int iter, int send_id)
 {
 	int x, y, iter_aux;
@@ -490,6 +496,28 @@ void mpi_send_data ( unsigned short ***info, matrix_info *A, matrix_list *B, int
 	
 }
 
+/* mpi_recv_data ( info, A, B, iter, status)
+ * 
+ * Input:
+ *			info -> matrix (three dimensions) that has all the last lines and collums
+ * 			A -> structure matrix_info
+ *  		B -> structure matrix_list
+ * 			iter -> iteration number
+ * 			send_id -> process id
+ * 
+ * Output:
+ * 			None
+ * 
+ * Changes:
+ * 			Nothing
+ * 
+ * Description:
+ * 			This function receives the last collum and last line of some matrix to some process
+ * 
+ * Notes:
+ * 			This function is only run by the master (process id==0)			
+ * 
+ */
 void mpi_recv_data (unsigned short ***info, matrix_info *A, matrix_list *B, int iter, MPI_Status *status)
 {	
 	int j, iter_aux;
@@ -517,6 +545,24 @@ void mpi_recv_data (unsigned short ***info, matrix_info *A, matrix_list *B, int 
 		info[iter_aux][1][j] = info_aux[1][j];
 }
 
+/* next_process(send_id, p)
+ * 
+ * Input:
+ * 			send_id -> process id
+ * 			p -> number of processes
+ * 
+ * Output:
+ * 			next processe to send
+ * 
+ * Changes:
+ * 			Nothing
+ * 
+ * Description:
+ * 			This function receives an id and does a simple add operation that verifies if the process number is not passed
+ * 
+ * Notes:		
+ * 
+ */
 int next_process(int send_id, int p)
 {
 	send_id = send_id+1;
@@ -537,7 +583,7 @@ int next_process(int send_id, int p)
  * 			Nothing
  * 
  * Description:
- * 			This function sends trash message with a JUMPTAG to slave that makes it jump to the next task
+ * 			This function sends trash message with a JUMPTAG to slave that makes it jump to the next task (go_back)
  * 
  * Notes:
  * 			This function is only run by the master (process id==0)			
@@ -558,6 +604,25 @@ void jump_process(matrix_info *A, int p)
 	}
 }
 
+/* end_process(A, p)
+ * 
+ * Input:
+ *			A -> structure matrix_info
+ * 			p -> number of processes
+ * 
+ * Output:
+ * 			None
+ * 
+ * Changes:
+ * 			Nothing
+ * 
+ * Description:
+ * 			This function sends trash message with a DIETAG to slave that makes it end
+ * 
+ * Notes:
+ * 			This function is only run by the master (process id==0)			
+ * 
+ */
 void end_process(matrix_info *A, int p)
 {
 	int j, send_id;
@@ -605,9 +670,11 @@ matrix_info* initialize_matrix_info(char **argv, int p)
 	A -> size_y = 0;
 	A -> size_xd= 0;
 	A -> size_yd= 0;
+	A -> iter = 0;
 	A -> x=NULL;
 	A -> y=NULL;
 	A -> matrix_dist = NULL;
+	A -> matrix_iter = NULL;
 	
 	//reads the files and changes A based on it
 	read_file(argv, A);
@@ -618,13 +685,11 @@ matrix_info* initialize_matrix_info(char **argv, int p)
 	//number of iterations
 	A -> iter = ((A->size_x)/(A->size_xd))*((A->size_y)/(A->size_yd));
 	
+	//allocs and initializes the A-> matrix_dist
+	A-> matrix_dist = (unsigned short *)calloc((A -> iter +1), sizeof(unsigned short));
+	
 	//
-	A-> matrix_dist = (unsigned short *)calloc((A->iter +1), sizeof(unsigned short));
-	if (A-> matrix_dist  == NULL)
-	{
-		fprintf(stdout, "Error in A-> matrix_dist calloc\n");
-		exit(ERROR);
-	}
+	A-> matrix_dist =  initialize_short_vector(A->iter);
 		
 	//Alocation and initialization of A->matrix_iter
 	A-> matrix_iter = (unsigned short **)calloc((A->size_x/A->size_xd +2), sizeof(unsigned short*));
@@ -636,12 +701,7 @@ matrix_info* initialize_matrix_info(char **argv, int p)
 	
 	for(i = 0; i < A->size_x/A->size_xd +1 ; i++)
 	{
-		A-> matrix_iter [i] = (unsigned short *)calloc((A->size_y/A->size_yd +2), sizeof(unsigned short));
-		if (A-> matrix_iter[i] == NULL)
-		{
-		fprintf(stdout, "Error in A-> matrix_dist[i] calloc\n");
-		exit(ERROR);
-		}	
+		A-> matrix_iter [i] = initialize_short_vector(A->size_y/A->size_yd);
 	}
 	
 	//defines the iteration to be made in each small matrix
@@ -699,7 +759,6 @@ void read_file(char **argv, matrix_info *A)
 	size_yy = ((*A).size_y+ SIZE_BUFFER)*sizeof(char);
 		
 	//buffer reallocated to the size (plus some margin) of the biggest line
-	
 	buffer=realloc(buffer, max(size_xx, size_yy));
 		
 	if (buffer == NULL)
@@ -721,21 +780,17 @@ void read_file(char **argv, matrix_info *A)
 		exit(ERROR);
 	}
 	
-	
-		fgets(buffer, size_xx, f);
-		sscanf(buffer, "%s\n", (*A).x);
-		fgets(buffer, size_yy,  f);
-		sscanf(buffer, "%s\n", (*A).y);
-	
-	//printf("x= %s\ny= %s\n", (*A).x, (*A).y);
-	
-	
+	fgets(buffer, size_xx, f);
+	sscanf(buffer, "%s\n", (*A).x);
+	fgets(buffer, size_yy,  f);
+	sscanf(buffer, "%s\n", (*A).y);
 }
 
-/* divide_by_prime(A)
+/* divide(A,p)
  * 
  * Input:
  * 			A -> structure matrix_info
+ * 			p -> number of processes
  * 
  * Output:
  * 			None
@@ -745,16 +800,15 @@ void read_file(char **argv, matrix_info *A)
  * 			A->size_yd
  * 
  * Description:
- * 			This function finds the prime numbers for witch the number of lines and collums can be divided.
+ * 			This function finds the ideal number to divide the matrix in small ones
  * 			This assures that the matrix is divided in equal peaces
  * 
  * Notes:		
- * 			Doesn't work if the proposed run number is prime
+ * 			Doesn't work if the proposed run number is prime (runs sequencial)
  * 
  */
 void divide(matrix_info *A, int p)
 {
-
 	int i, num_slaves, found_flag=0;
 	
 	num_slaves = p-1;
@@ -797,10 +851,6 @@ void divide(matrix_info *A, int p)
 		}
 	}
 	if(found_flag==0) A->size_yd = A->size_y;
-	/*printf("num_slaves=%d\n", num_slaves);
-	printf("size_x=%d\tsize_y=%d\n", A->size_x, A->size_y);
-	printf("size_xd=%d\tsize_yd=%d\n", A->size_xd, A->size_yd);
-	*/
 }
 
 /* matrix_iter(A)
@@ -826,45 +876,36 @@ int size_x, size_y;
 	size_x = A->size_x/A->size_xd;
 	size_y = A->size_y/A->size_yd;
 	int i, j, h, iter = 1;
-	
-	
-	
-	/*printf("size_x = %d, size_y= %d\n", size_x, size_y);
-	printf("A->size_x = %d, A->size_y= %d\n", A->size_x,A->size_y);
-	printf("A->size_xd = %d, A->size_yd= %d\n", A->size_xd,A->size_yd);
-	printf("1\n");*/
+
 	if(size_x==size_y){
-		//printf("2\n");
 		for(h=1; h<=size_y; h++)		
 			for(i=1, j=h; j>0; i++, j--)
 			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}//printf("3\n");
+			}
 		for(h=size_y+1; h<size_y+size_x; h++)
 			for(i=h-size_y+1, j=size_x; i<=size_x; j--, i++)
 			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}//printf("4\n");
+			}
 	}
 	else
-	{//printf("5\n");
+	{
 		for(h=1; h<=size_y; h++)
 			for(i=1, j=h; j>0 && i<=size_x; i++, j--)
-			{//printf("h = %d, i = %d,  = %d\n",h, i, j);
+			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}//printf("6\n");
+			}
 		for(h=size_y+1; h<=size_x+size_y; h++)
 			for(i=h-size_y+1, j=size_y; j>0 && i<=size_x; i++, j--)
 			{
 				A-> matrix_iter [i][j] = iter;
 				iter ++;
-			}//printf("7\n");
+			}
 	}
-	//printf("8\n");
-	
 }
 
 
@@ -954,6 +995,24 @@ matrix_list* initialize_matrix_list(matrix_info *A)
 	return B;
 }
 
+/* initialize_short_vector(size)
+ * 
+ * Input:
+ * 			size -> size to alloc
+ * 
+ * Output:
+ * 			stucture matrix_list initialized
+ * 
+ * Changes:
+ * 			Nothing
+ * 
+ * Description:
+ * 			This function allocs memory for the structure matrix_list
+ * 
+ * Notes:
+ * 			The initialization is made for the first iteration
+ * 
+ */
 unsigned short* initialize_short_vector(int size)
 {
 	unsigned short *vector;
@@ -999,7 +1058,7 @@ void matrix_calc(matrix_info *A, matrix_list *B)
 	{
 		for(j =1 ;j<= A->size_yd;j++)
 		{
-			if (A->x[id[0]+ i-2]==A->y[id[1] + j-2]) 				//	computation of matrix c
+			if (A->x[id[0]+ i-2]==A->y[id[1] + j-2]) //	computation of matrix c
 				B->matrix[i][j] = B->matrix[i-1][j-1]+ cost(i); //match
 			else 
 				B->matrix[i][j] = max(B->matrix[i][j-1],B->matrix[i-1][j]);
@@ -1057,13 +1116,7 @@ unsigned short *generate_matrix_info(matrix_list *B, int size, int size_ref, int
 	unsigned short *info;
 	int i;
 	
-	info = (unsigned short *)calloc((size+1), sizeof(unsigned short));
-	if (info  == NULL)
-	{
-		printf( "Error in info[] malloc\n");
-		exit(ERROR);
-	}
-	
+	info = initialize_short_vector(size);
 	for (i = 0; i <= size; i++)
 	{
 		if(side == 1) info[i] = B->matrix[size_ref][i];
@@ -1116,6 +1169,29 @@ unsigned short ***initialize_info(matrix_info *A)
 	return info;
 }
 
+/* go_back (A, B, z, k , pos_final)
+ * 
+ * Input:
+ *			A -> structure matrix_info
+ *  		B -> structure matrix_list
+ * 			z -> char string to write the matches
+ * 			k -> number of matches
+ * 			pos_final -> matrix to write the last cordinates after run
+ * 
+ * Output:
+ * 			None
+ * 
+ * Changes:
+ * 			z
+ * 			k
+ * 			pos_final
+ * 
+ * Description:
+ * 			This function runs the matrix back and finds the matches
+ * 
+ * Notes:	
+ * 
+ */
 void go_back (matrix_info *A, matrix_list *B, char *z, int *k ,unsigned short **pos_final)
 {
 	int i, j, i2, j2;
@@ -1125,13 +1201,13 @@ void go_back (matrix_info *A, matrix_list *B, char *z, int *k ,unsigned short **
 	i2 = pos_final[1][0];
 	j2= pos_final[1][1];
 	
+	//run until gets to last line or collum
 	while((i>0)&&(j>0))
 	{
 			
 		if (A->x[i2-1]==A->y[j2-1]) //match
 		{	
 			z[*k]=A->x[i2-1];
-			/*printf("%d -> %c; ", *k, A->x[i2-1]);*/
 			i=i-1;
 			i2=i2-1;
 			j=j-1;
@@ -1141,7 +1217,7 @@ void go_back (matrix_info *A, matrix_list *B, char *z, int *k ,unsigned short **
 		}
 			
 		else
-		{							//	computation of LCS from matrix
+		{
 			
 			if(B->matrix[i-1][j]>B->matrix[i][j-1])
 			{
@@ -1155,7 +1231,7 @@ void go_back (matrix_info *A, matrix_list *B, char *z, int *k ,unsigned short **
 			}	
 		}
 	}
-	/*printf("\n");*/
+	
 	pos_final[0][0] = (unsigned short)i;
 	pos_final[0][1] = (unsigned short)j;
 	pos_final[1][0] = (unsigned short)i2;
